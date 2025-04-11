@@ -4,7 +4,11 @@ This folder contains the coordinator server implementation for the avspl1t syste
 
 ## Setup
 
-1. Install the python dependencies for the server (this requires `poetry` to be installed):
+1. Duplicate [config_example.json](config_example.json) and rename to `config.json`.
+
+   - Fill in your configuration details.
+
+2. Install the python dependencies for the server (this requires `poetry` to be installed):
 
 ```
 poetry install
