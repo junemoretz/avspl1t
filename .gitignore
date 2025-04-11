@@ -1,0 +1,5 @@
+__pycache__/
+poetry.lock
+.vscode
+client/tests/logs
+config.json

@@ -4,7 +4,11 @@ This folder contains the coordinator server implementation for the avspl1t syste
 
 ## Setup
 
-(todo!)
+1. Install the python dependencies for the server (this requires `poetry` to be installed):
+
+```
+poetry install
+```
 
 ## Usage
 
