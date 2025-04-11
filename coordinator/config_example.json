@@ -1,3 +1,4 @@
 {
-  "databaseFile": "example.db"
+  "databaseFile": "example.db",
+  "heartbeatTimeout": 15
 }
