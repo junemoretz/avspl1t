@@ -1,4 +1,7 @@
 {
   "databaseFile": "example.db",
-  "heartbeatTimeout": 15
+  "heartbeatTimeout": 15,
+  "maxWorkers": 10,
+  "host": "localhost",
+  "port": 8080
 }
