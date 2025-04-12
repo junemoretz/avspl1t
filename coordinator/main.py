@@ -1,7 +1,6 @@
 # Server Setup
 import json
 import grpc
-import proto.avspl1t_pb2 as avspl1t_pb2
 import proto.avspl1t_pb2_grpc as avspl1t_pb2_grpc
 
 from concurrent import futures
