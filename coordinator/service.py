@@ -4,9 +4,11 @@ import grpc
 import proto.avspl1t_pb2 as avspl1t_pb2
 import proto.avspl1t_pb2_grpc as avspl1t_pb2_grpc
 
-from db import get_db, timestamp_from_sql
+from db import get_db
+from logic.job import create_job, get_job
+from logic.task import assign_next_task, build_task_proto, handle_split_finish, handle_encode_finish, handle_manifest_finish
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 CONFIG_FILE = 'config.json'
 
@@ -38,32 +40,10 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
 
         # Extract job details from the request
         job = request.av1_encode_job
-        input_path = job.input_file.fsfile.path
-        output_path = job.output_directory.fsfolder.path
-        crf = job.crf
-        seconds_per_segment = job.seconds_per_segment
+        job_id = create_job(job)
 
-        with get_db() as db:
-            # Add new job to the jobs table
-            cur = db.execute(
-                """
-                INSERT INTO jobs (input_file, output_dir, crf, seconds_per_segment)
-                VALUES (?, ?, ?, ?) RETURNING id
-                """,
-                (input_path, output_path, crf, seconds_per_segment)
-            )
-            # Get the job ID from the result
-            job_id = cur.fetchone()[0]
-            # Create a split video task and insert it into the tasks table
-            db.execute(
-                """
-                INSERT INTO tasks (job_id, type, input_file, output_dir, crf)
-                VALUES (?, 'split', ?, ?, ?)
-                """,
-                (job_id, input_path, output_path, crf)
-            )
         # return the JobId object
-        return avspl1t_pb2.JobId(id=str(job_id))
+        return avspl1t_pb2.JobId(id=job_id)
 
     def GetJob(self, request, context):
         """
@@ -77,54 +57,12 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
         Raises:
             grpc.StatusCode: If there is an error during job retrieval.
         """
-        with get_db() as db:
-            # Get the job details from the database
-            job = db.execute(
-                """
-                SELECT * FROM jobs WHERE id = ?
-                """,
-                (request.id,)).fetchone()
+        job = get_job(request.id)
+        if job is None:
             # If no job is found, set the error code and return an empty Job object
-            if not job:
-                context.set_code(grpc.StatusCode.NOT_FOUND)
-                return avspl1t_pb2.Job()
-            # Get the number of tasks associated with the job
-            total_tasks = db.execute(
-                """
-                SELECT COUNT(*) FROM tasks WHERE job_id = ?
-                """,
-                (job['id'],)).fetchone()[0]
-            # Get the number of completed tasks for the job
-            completed_tasks = db.execute(
-                """
-                SELECT COUNT(*) FROM tasks WHERE job_id = ? AND completed = 1
-                """,
-                (job['id'],)).fetchone()[0]
-            # Calculate the percentage of completion
-            percent_complete = 0 if total_tasks == 0 else (round(
-                completed_tasks / total_tasks) * 100)
-            # Create a Job object with the job details
-            job_obj = avspl1t_pb2.Job(
-                id=str(job['id']),
-                finished=(job['status'] == 'complete'),
-                failed=(job['status'] == 'failed'),
-                percent_complete=percent_complete,
-                generated_manipest=avspl1t_pb2.File(
-                    fsfile=avspl1t_pb2.FSFile(path=job['manifest_file'] or '')),
-                job_details=avspl1t_pb2.JobDetails(
-                    av1_encode_job=avspl1t_pb2.AV1EncodeJob(
-                        input_file=avspl1t_pb2.File(
-                            fsFile=avspl1t_pb2.FSFile(path=job['input_file'])),
-                        output_directory=avspl1t_pb2.Folder(
-                            fsFile=avspl1t_pb2.FSFolder(path=job['output_dir'])),
-                        working_directory=avspl1t_pb2.Folder(
-                            fsFile=avspl1t_pb2.FSFolder(path=job['output_dir'])),
-                        crf=job['crf'],
-                        seconds_per_segment=job['seconds_per_segment'],
-                    )),
-                created_at=timestamp_from_sql(job['created_at']),
-            )
-            return job_obj
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            return avspl1t_pb2.Job()
+        return job
 
     def GetTask(self, request, context):
         """
@@ -138,89 +76,27 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
             grpc.StatusCode: If there is an error during task retrieval.
         """
         with get_db() as db:
-            now = datetime.now(timezone.utc)
-            # Retrieve task from the database and mark as "in progress"
-            db.execute("BEGIN IMMEDIATE")
-            # Find most recent task that meets the criteria:
-            # !completed && (!worker || heartbeat more than HEARTBEAT_TIMEOUT ago)
-            task = db.execute(
-                """
-                SELECT * FROM tasks
-                WHERE completed = 0 AND (assigned_worker IS NULL OR last_heartbeat IS NULL OR last_heartbeat < ?)
-                ORDER BY id DESC LIMIT 1
-                """,
-                (now - timedelta(seconds=self.HEARTBEAT_TIMEOUT,))
-            ).fetchone()
-            # No available task meets assignment conditions; return empty Task
-            if not task:
-                db.execute("COMMIT")
+            task_row = assign_next_task(request.worker_id)
+            if task_row is None:
+                #  If no task found, return an empty Task object
                 return avspl1t_pb2.Task()
-            # Else, mark the task as assigned to the worker
-            db.execute(
-                """
-                UPDATE tasks
-                SET assigned_worker = ?, last_heartbeat = ?
-                WHERE id = ?
-                """,
-                (request.worker_id, now, task['id'])
-            )
-            db.execute("COMMIT")
 
-            # find the job associated with the task
-            job = db.execute("""
-                SELECT * FROM jobs WHERE id = ?
-                """,
-                             (task['job_id'],)).fetchone()
-
-            # construct correct task object based on type
-            if task['type'] == 'split':
-                task_obj = avspl1t_pb2.Task(
-                    split_video_task=avspl1t_pb2.SplitVideoTask(
-                        input_file=avspl1t_pb2.File(
-                            fsfile=avspl1t_pb2.FSFile(path=task['input_file'])),
-                        output_directory=avspl1t_pb2.Folder(
-                            fsfolder=avspl1t_pb2.FSFolder(path=task['output_dir'])),
-                        seconds_per_segment=job['seconds_per_segment'],
-                    ),
-                )
-            elif task['type'] == 'encode':
-                task_obj = avspl1t_pb2.Task(
-                    encode_video_task=avspl1t_pb2.EncodeVideoTask(
-                        input_file=avspl1t_pb2.File(
-                            fsfile=avspl1t_pb2.FSFile(path=task['input_file'])),
-                        output_directory=avspl1t_pb2.Folder(
-                            fsfolder=avspl1t_pb2.FSFolder(path=task['output_dir'])),
-                        crf=task['crf'],
-                    ),
-                )
-            elif task['type'] == 'manifest':
-                manifest_files = db.execute(
+            with get_db() as db:
+                # Find associated job
+                job_row = db.execute(
                     """
-                    SELECT * FROM tasks WHERE job_id = ? AND type = 'encode' ORDER BY index ASC
+                    SELECT * FROM jobs WHERE id = ?
                     """,
-                    (task['job_id'],)).fetchall()
-                task_obj = avspl1t_pb2.Task(
-                    generate_manifest_task=avspl1t_pb2.GenerateManifestTask(
-                        files=[
-                            avspl1t_pb2.File(
-                                fsfile=avspl1t_pb2.FSFile(
-                                    path=et['output_file']),
-                            )
-                            for et in manifest_files if et['output_file']
-                        ],
-                    ),
-                )
-            else:
-                # If the task type is not recognized, set the error code and return an empty Task object
+                    (task_row['job_id'],)).fetchone()
+
+            # Construct the task object based on the task type
+            task_proto = build_task_proto(task_row, job_row)
+            if task_proto is None:
+                # If task_proto is None, set the error code and return an empty Task object
                 context.set_code(grpc.StatusCode.INTERNAL)
                 context.set_details("Unknown task type")
                 return avspl1t_pb2.Task()
-
-            task_obj.id = str(task['id'])  # set task ID
-            task_obj.created_at = timestamp_from_sql(
-                task['last_heartbeat'] or now)
-
-            return task_obj
+            return task_proto
 
     def Heartbeat(self, request, context):
         """
@@ -242,6 +118,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
             if not task:
                 # If no task is found, set the error code and return an empty object
                 context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details("Task not found")
                 return avspl1t_pb2.Empty()
             if task and task['assigned_worker'] == request.worker_id:
                 # Update the last heartbeat time for the task
@@ -320,50 +197,9 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
 
             # Additional steps should take place depending on task type
             if task['type'] == 'split':
-                for i, f in enumerate(request.split_video_finish_message.generated_files):
-                    # Add encode tasks for each generated file
-                    db.execute(
-                        """
-                        INSERT INTO tasks (job_id, type, input_file, output_dir, crf, index)
-                        VALUES (?, 'encode', ?, ?, ?, ?)
-                        """,
-                        (task['job_id'], f.fsfile.path,
-                            task['output_dir'], task['crf'], i)
-                    )
+                handle_split_finish(db, task, request)
             elif task['type'] == 'encode':
-                # If the task is an encode task, check if all encode tasks are completed
-                # and if so, create a manifest task
-                remaining = db.execute(
-                    """
-                    SELECT COUNT(*) FROM tasks WHERE job_id = ? AND completed = 0
-                    """,
-                    (task['job_id'],)).fetchone()[0]
-                if remaining == 0:
-                    db.execute(
-                        """
-                        INSERT INTO tasks (job_id, type) VALUES (?, 'manifest')
-                        """,
-                        (task['job_id'],)
-                    )
+                handle_encode_finish(db, task)
             elif task['type'] == 'manifest':
-                if request.HasField("generate_manifest_finish_message"):
-                    # If the task is a manifest task, update the job status to complete
-                    db.execute(
-                        """
-                        UPDATE tasks
-                        SET output_file = ?
-                        WHERE id = ?
-                        """,
-                        (request.generate_manifest_finish_message.generated_file.fsfile.path, request.task_id)
-                    )
-                    db.execute(
-                        """
-                        UPDATE jobs
-                        SET status = 'complete',
-                            manifest_file = ?
-                        WHERE id = ?
-                        """,
-                        (request.generate_manifest_finish_message.generated_file.fsfile.path,
-                         task['job_id'])
-                    )
+                handle_manifest_finish(db, task, request)
             return avspl1t_pb2.Empty()
