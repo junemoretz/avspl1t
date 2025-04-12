@@ -1,10 +1,10 @@
 # Server Setup
 import json
 import grpc
-import proto.avspl1t_pb2_grpc as avspl1t_pb2_grpc
+from proto.avspl1t_pb2_grpc import add_CoordinatorServiceServicer_to_server
 
 from concurrent import futures
-from service import CoordinatorService
+from service import CoordinatorServicer
 from db import init_db
 
 CONFIG_FILE = 'config.json'
@@ -18,8 +18,8 @@ def serve():
         port = config['port']
         max_workers = config['maxWorkers']
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
-    avspl1t_pb2_grpc.add_CoordinatorServiceServicer_to_server(
-        CoordinatorService(), server
+    add_CoordinatorServiceServicer_to_server(
+        CoordinatorServicer(), server
     )
     server.add_insecure_port(f'{host}:{port}')
     server.start()

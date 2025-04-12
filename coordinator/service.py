@@ -1,8 +1,8 @@
 # Coordinator Servicer class
 import json
 import grpc
-import proto.avspl1t_pb2 as avspl1t_pb2
-import proto.avspl1t_pb2_grpc as avspl1t_pb2_grpc
+from proto.avspl1t_pb2_grpc import CoordinatorServiceServicer
+from proto.avspl1t_pb2 import JobId, Job, Task, Empty
 
 from db import get_db
 from logic.job import create_job, get_job
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 CONFIG_FILE = 'config.json'
 
 
-class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
+class CoordinatorServicer(CoordinatorServiceServicer):
     def __init__(self):
         # set heartbeat timeout from config
         with open(CONFIG_FILE, 'r') as f:
@@ -36,14 +36,14 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
             # If the request does not contain an AV1EncodeJob field, set the error code and details
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details("Missing AV1EncodeJob field")
-            return avspl1t_pb2.JobId()
+            return JobId()
 
         # Extract job details from the request
         job = request.av1_encode_job
         job_id = create_job(job)
 
         # return the JobId object
-        return avspl1t_pb2.JobId(id=job_id)
+        return JobId(id=job_id)
 
     def GetJob(self, request, context):
         """
@@ -61,7 +61,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
         if job is None:
             # If no job is found, set the error code and return an empty Job object
             context.set_code(grpc.StatusCode.NOT_FOUND)
-            return avspl1t_pb2.Job()
+            return Job()
         return job
 
     def GetTask(self, request, context):
@@ -79,7 +79,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
             task_row = assign_next_task(request.worker_id)
             if task_row is None:
                 #  If no task found, return an empty Task object
-                return avspl1t_pb2.Task()
+                return Task()
 
             with get_db() as db:
                 # Find associated job
@@ -95,7 +95,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
                 # If task_proto is None, set the error code and return an empty Task object
                 context.set_code(grpc.StatusCode.INTERNAL)
                 context.set_details("Unknown task type")
-                return avspl1t_pb2.Task()
+                return Task()
             return task_proto
 
     def Heartbeat(self, request, context):
@@ -119,7 +119,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
                 # If no task is found, set the error code and return an empty object
                 context.set_code(grpc.StatusCode.NOT_FOUND)
                 context.set_details("Task not found")
-                return avspl1t_pb2.Empty()
+                return Empty()
             if task and task['assigned_worker'] == request.worker_id:
                 # Update the last heartbeat time for the task
                 db.execute(
@@ -130,7 +130,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
                     """,
                     (datetime.now(timezone.utc), request.task_id)
                 )
-            return avspl1t_pb2.Empty()
+            return Empty()
 
     def FinishTask(self, request, context):
         """
@@ -152,7 +152,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
             if not task:
                 # If no task is found, set the error code and return an empty object
                 context.set_code(grpc.StatusCode.NOT_FOUND)
-                return avspl1t_pb2.Empty()
+                return Empty()
             if not request.succeeded:
                 # If the task failed, mark job as failed, and all associated tasks as completed/canceled
                 db.execute(
@@ -171,7 +171,7 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
                     """,
                     (request.task_id,)
                 )
-                return avspl1t_pb2.Empty()
+                return Empty()
 
             # If succeeded, mark task as completed
             db.execute(
@@ -202,4 +202,4 @@ class CoordinatorService(avspl1t_pb2_grpc.CoordinatorService):
                 handle_encode_finish(db, task)
             elif task['type'] == 'manifest':
                 handle_manifest_finish(db, task, request)
-            return avspl1t_pb2.Empty()
+            return Empty()
