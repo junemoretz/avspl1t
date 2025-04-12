@@ -3,3 +3,4 @@ poetry.lock
 .vscode
 client/tests/logs
 config.json
+*.db

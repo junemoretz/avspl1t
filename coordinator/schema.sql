@@ -4,18 +4,18 @@ DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS jobs;
 
 CREATE TABLE jobs (
-    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     input_file TEXT NOT NULL,
     output_dir TEXT NOT NULL,
     crf INTEGER NOT NULL, -- constate rate factor (encoding quality)
     seconds_per_segment INTEGER NOT NULL, -- seconds per segment for splitting
     status TEXT NOT NULL CHECK (status IN ('in_progress', 'complete', 'failed')) DEFAULT 'in_progress',
     manifest_file TEXT, -- path to the generated manifest file (if successful)
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- timestamp when job was submitted
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- timestamp when job was submitted
 );
 
 CREATE TABLE tasks (
-    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     job_id INTEGER NOT NULL, -- link task to job
     type TEXT NOT NULL CHECK (type IN ('split', 'encode', 'manifest')),
     input_file TEXT,
@@ -26,6 +26,6 @@ CREATE TABLE tasks (
     failed BOOLEAN DEFAULT 0,
     assigned_worker TEXT,
     last_heartbeat TIMESTAMP, -- timestamp of the last heartbeat from the worker
-    index INTEGER, -- used to order encode tasks
+    task_index INTEGER, -- used to order encode tasks
     FOREIGN KEY (job_id) REFERENCES jobs(id)
 );

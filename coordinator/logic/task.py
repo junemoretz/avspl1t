@@ -79,7 +79,7 @@ def build_task_proto(task, job):
         with get_db() as db:
             manifest_files = db.execute(
                 """
-                SELECT * FROM tasks WHERE job_id = ? AND type = 'encode' AND completed = 1 ORDER BY index ASC
+                SELECT * FROM tasks WHERE job_id = ? AND type = 'encode' AND completed = 1 ORDER BY task_index ASC
                 """,
                 (task['job_id'],)).fetchall()
             task_obj = Task(
@@ -114,7 +114,7 @@ def handle_split_finish(db, task, request):
         # Add encode tasks for each generated file
         db.execute(
             """
-            INSERT INTO tasks (job_id, type, input_file, output_dir, crf, index)
+            INSERT INTO tasks (job_id, type, input_file, output_dir, crf, task_index)
             VALUES (?, 'encode', ?, ?, ?, ?)
             """,
             (task['job_id'], f.fsfile.path,
