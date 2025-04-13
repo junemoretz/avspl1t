@@ -4,7 +4,6 @@ import grpc
 from proto.avspl1t_pb2_grpc import CoordinatorServiceServicer
 from proto.avspl1t_pb2 import JobId, Job, Task, Empty
 
-from logic.db import get_db
 from logic.job import create_job, get_job
 from logic.task import assign_next_task, build_task_proto, handle_split_finish, handle_encode_finish, handle_manifest_finish
 
@@ -14,11 +13,12 @@ CONFIG_FILE = 'config.json'
 
 
 class CoordinatorServicer(CoordinatorServiceServicer):
-    def __init__(self, config_file=CONFIG_FILE):
+    def __init__(self, database, config_file=CONFIG_FILE):
         # set heartbeat timeout from config
         with open(config_file, 'r') as f:
             config = json.load(f)
             self.HEARTBEAT_TIMEOUT = config['heartbeatTimeout']
+        self.database = database
 
     def SubmitJob(self, request, context):
         """
@@ -40,7 +40,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
 
         # Extract job details from the request
         job = request.av1_encode_job
-        job_id = create_job(job)
+        job_id = create_job(self.database, job)
 
         # return the JobId object
         return JobId(id=job_id)
@@ -57,7 +57,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during job retrieval.
         """
-        job = get_job(request.id)
+        job = get_job(self.database, request.id)
         if job is None:
             # If no job is found, set the error code and return an empty Job object
             context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -75,13 +75,14 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during task retrieval.
         """
-        with get_db() as db:
-            task_row = assign_next_task(request.worker_id)
+        with self.database.get_db() as db:
+            task_row = assign_next_task(self.database,
+                                        request.worker_id, self.HEARTBEAT_TIMEOUT)
             if task_row is None:
                 #  If no task found, return an empty Task object
                 return Task()
 
-            with get_db() as db:
+            with self.database.get_db() as db:
                 # Find associated job
                 job_row = db.execute(
                     """
@@ -90,7 +91,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
                     (task_row['job_id'],)).fetchone()
 
             # Construct the task object based on the task type
-            task_proto = build_task_proto(task_row, job_row)
+            task_proto = build_task_proto(self.database, task_row, job_row)
             if task_proto is None:
                 # If task_proto is None, set the error code and return an empty Task object
                 context.set_code(grpc.StatusCode.INTERNAL)
@@ -109,7 +110,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during heartbeat update.
         """
-        with get_db() as db:
+        with self.database.get_db() as db:
             task = db.execute(
                 """
                 SELECT * FROM tasks WHERE id = ?
@@ -143,7 +144,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during task completion.
         """
-        with get_db() as db:
+        with self.database.get_db() as db:
             task = db.execute(
                 """
                 SELECT * FROM tasks WHERE id = ?

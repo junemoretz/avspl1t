@@ -1,13 +1,14 @@
 # Handle Job-level Logic for Coordinator
-from logic.db import get_db, timestamp_from_sql
+from logic.utils import timestamp_from_sql
 from proto.avspl1t_pb2 import Job, File, FSFile, Folder, FSFolder, JobDetails, AV1EncodeJob
 
 
-def create_job(job):
+def create_job(database, job):
     """
     Create a new job in the database.
 
     Args:
+        database (DBLogic): The database logic object.
         job (AV1EncodeJob): The AV1EncodeJob object containing job details.
 
     Returns:
@@ -18,7 +19,7 @@ def create_job(job):
     crf = job.crf
     seconds_per_segment = job.seconds_per_segment
 
-    with get_db() as db:
+    with database.get_db() as db:
         # add the job to the database
         db.execute(
             "INSERT INTO jobs (input_file, output_dir, crf, seconds_per_segment) VALUES (?, ?, ?, ?)",
@@ -37,16 +38,17 @@ def create_job(job):
     return str(job_id)
 
 
-def get_job(job_id):
+def get_job(database, job_id):
     """
     Get a job by its ID.
 
     Args:
+        database (DBLogic): The database logic object.
         job_id (str): The ID of the job.
     Returns:
         Job: The Job object containing job details.
     """
-    with get_db() as db:
+    with database.get_db() as db:
         job = db.execute(
             "SELECT * FROM jobs WHERE id = ?",
             (job_id,),

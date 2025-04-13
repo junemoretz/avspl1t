@@ -1,36 +1,28 @@
 # Handle Task-level Logic for Coordinator
-
-import json
 from datetime import datetime, timezone, timedelta
-from logic.db import get_db, timestamp_from_sql
+from logic.utils import timestamp_from_sql
 from proto.avspl1t_pb2 import Task, File, FSFile, Folder, FSFolder, SplitVideoTask, EncodeVideoTask, GenerateManifestTask
 
 
-CONFIG_FILE = '../config.json'
-
-# get heartbeat timeout from config
-with open(CONFIG_FILE, 'r') as f:
-    config = json.load(f)
-    HEARTBEAT_TIMEOUT = config['heartbeatTimeout']
-
-
-def assign_next_task(worker_id):
+def assign_next_task(database, worker_id, heartbeat_timeout):
     """
     Assign the next task to a worker.
     Args:
+        database (DBLogic): The database logic object.
         worker_id (str): The ID of the worker to assign the task to.
+        heartbeat_timeout (int): The timeout for the worker's heartbeat.
     Returns:
         Task: The Task object containing task details.
     """
     now = datetime.now(timezone.utc)
-    with get_db() as db:
+    with database.get_db() as db:
         # Retrieve task from the database and mark as "in progress"
         db.execute("BEGIN IMMEDIATE")
         # Find most recent task that meets the criteria:
-        # !completed && (!worker || heartbeat more than HEARTBEAT_TIMEOUT ago)
+        # !completed && (!worker || heartbeat more than heartbeat_timeout ago)
         task = db.execute(
             "SELECT * FROM tasks WHERE completed = 0 AND (assigned_worker IS NULL OR last_heartbeat IS NULL OR last_heartbeat < ?) ORDER BY id DESC LIMIT 1",
-            (now - timedelta(seconds=HEARTBEAT_TIMEOUT),),
+            (now - timedelta(seconds=heartbeat_timeout),),
         ).fetchone()
         # No available task meets assignment conditions; return None
         if not task:
@@ -45,10 +37,11 @@ def assign_next_task(worker_id):
         return task
 
 
-def build_task_proto(task, job):
+def build_task_proto(database, task, job):
     """
     Build a Task protobuf object from the task and job details.
     Args:
+        database (DBLogic): The database logic object.
         task (Task): The Task object containing task details.
         job (Job): The Job object containing job details.
     Returns:
@@ -76,7 +69,7 @@ def build_task_proto(task, job):
             )
         )
     elif task['type'] == 'manifest':
-        with get_db() as db:
+        with database.get_db() as db:
             manifest_files = db.execute(
                 """
                 SELECT * FROM tasks WHERE job_id = ? AND type = 'encode' AND completed = 1 ORDER BY task_index ASC

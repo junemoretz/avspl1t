@@ -1,60 +1,51 @@
 # DB helper functions
-
 import sqlite3
 import json
-from datetime import datetime, timezone
-from google.protobuf.timestamp_pb2 import Timestamp
 
-CONFIG_FILE = '../config.json'
-SCHEMA_FILE = '../schema.sql'
+CONFIG_FILE = 'config.json'
+SCHEMA_FILE = 'schema.sql'
 
 
-def get_db():
+class DBLogic:
     """
-    Get a connection to the SQLite database.
-
-    Returns:
-        sqlite3.Connection: A connection object to the SQLite database.
-    Raises:
-        sqlite3.Error: If there is an error connecting to the database.
+    A class to handle database logic.
     """
-    # Load the configuration file
-    with open(CONFIG_FILE, 'r') as f:
-        config = json.load(f)
-        db_file = config['databaseFile']
-    conn = sqlite3.connect(db_file)
-    conn.row_factory = sqlite3.Row
-    return conn
 
+    def __init__(self, config_file=CONFIG_FILE, schema_file=SCHEMA_FILE):
+        """
+        Initialize the DBLogic class with the configuration and schema files.
+        Args:
+            config_file (str): Path to the configuration file.
+            schema_file (str): Path to the schema file.
+        """
+        self.config_file = config_file
+        self.schema_file = schema_file
 
-def init_db():
-    """
-    Initialize the database by creating the necessary tables.
+        self.init_db()  # Initialize the database when the class is instantiated
 
-    Raises:
-        sqlite3.Error: If there is an error creating the tables.
-    """
-    with get_db() as db:
-        db.executescript(open(SCHEMA_FILE).read())
+    def get_db(self):
+        """
+        Get a connection to the SQLite database.
 
+        Returns:
+            sqlite3.Connection: A connection object to the SQLite database.
+        Raises:
+            sqlite3.Error: If there is an error connecting to the database.
+        """
+        # Load the configuration file
+        with open(self.config_file, 'r') as f:
+            config = json.load(f)
+            db_file = config['databaseFile']
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        return conn
 
-def timestamp_from_sql(dt):
-    """
-    Convert a Python datetime object to a google.protobuf.Timestamp object.
-    Args:
-        dt (datetime.datetime): The datetime object to convert.
-    Returns:
-        google.protobuf.Timestamp: The converted Timestamp object.
-    """
-    if not dt:
-        # Return a default Timestamp if dt is None
-        return Timestamp()
-    if isinstance(dt, str):
-        dt = datetime.fromisoformat(dt)
-    if dt.tzinfo is None:
-        # If the datetime object is naive, set it to UTC
-        dt = dt.replace(tzinfo=timezone.utc)
-    timestamp = Timestamp()
-    # Convert the datetime object to a Timestamp object
-    timestamp.FromDatetime(dt)
-    return timestamp
+    def init_db(self):
+        """
+        Initialize the database by creating the necessary tables.
+
+        Raises:
+            sqlite3.Error: If there is an error creating the tables.
+        """
+        with self.get_db() as db:
+            db.executescript(open(self.schema_file).read())

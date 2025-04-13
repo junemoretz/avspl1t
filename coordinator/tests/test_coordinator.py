@@ -9,19 +9,20 @@ sys.path.append('../')  # Adjust the path to import the main module
 from main import serve
 from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, FinishTaskMessage, SplitVideoFinishMessage, EncodeVideoFinishMessage, GenerateManifestFinishMessage, JobId, GetTaskMessage
 from proto.avspl1t_pb2_grpc import CoordinatorServiceStub
-from logic.db import init_db
+from logic.db import DBLogic
 
 # This is a test for the Coordinator gRPC service.
 
 CONFIG_FILE = '../config.json'
+SCHEMA_FILE = '../schema.sql'
 
 
 @pytest.fixture(scope="module")
 def grpc_server():
     """Fixture to start the gRPC server."""
-    init_db()
+    db = DBLogic(config_file=CONFIG_FILE, schema_file=SCHEMA_FILE)
     server_thread = threading.Thread(
-        target=serve, args=(f"{CONFIG_FILE}",), daemon=True)
+        target=serve, args=(db, f"{CONFIG_FILE}",), daemon=True)
     server_thread.start()
     time.sleep(0.5)  # Give the server time to start
     yield
