@@ -1,0 +1,111 @@
+import sys
+
+sys.path.append('../')  # Adjust the path to import the main module
+from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, FinishTaskMessage, SplitVideoFinishMessage, EncodeVideoFinishMessage, GenerateManifestFinishMessage, JobId, GetTaskMessage
+
+# This is a test for edge cases for the Coordinator gRPC service.
+
+
+def test_get_job_initial_status(stub):
+    """
+    Test the initial status of a job after submission.
+
+    :param stub: The gRPC client stub for the CoordinatorService.
+    """
+    input_path = "/tmp/test_input_initial.mp4"
+    output_path = "/tmp/test_output_initial"
+
+    # Create a job
+    job = AV1EncodeJob(
+        input_file=File(fsfile=FSFile(path=input_path)),
+        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        crf=22,
+        seconds_per_segment=5,
+    )
+
+    # Submit the job and check status
+    job_id = stub.SubmitJob(JobDetails(av1_encode_job=job)).id
+    job_status = stub.GetJob(JobId(id=job_id))
+
+    assert not job_status.finished, "Job should not be finished initially"
+    assert job_status.percent_complete == 0, f"Job should be 0% complete initially"
+
+
+def test_failed_task_marks_job_failed(stub):
+    """
+    Test that a failed task marks the whole job as failed.
+
+    :param stub: The gRPC client stub for the CoordinatorService.
+    """
+    input_path = "/tmp/test_fail_input.mp4"
+    output_path = "/tmp/test_fail_output"
+
+    # Create a job
+    job = AV1EncodeJob(
+        input_file=File(fsfile=FSFile(path=input_path)),
+        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        crf=30,
+        seconds_per_segment=6,
+    )
+
+    # Submit the job
+    job_id = stub.SubmitJob(JobDetails(av1_encode_job=job)).id
+
+    # Pull the split task and mark it as failed
+    task = stub.GetTask(GetTaskMessage(worker_id="fail_worker"))
+    stub.FinishTask(FinishTaskMessage(
+        worker_id="fail_worker",
+        task_id=task.id,
+        succeeded=False
+    ))
+
+    # Pull the job status and check if it is marked as failed
+    job_status = stub.GetJob(JobId(id=job_id))
+    assert job_status.failed, "Job should be marked as failed after a failed task"
+    assert not job_status.finished, "Job should not be finished after a failed task"
+
+
+def test_duplicate_finish_task_is_idempotent(stub):
+    """
+    Test that finishing a task twice does not change the job status.
+
+    :param stub: The gRPC client stub for the CoordinatorService.
+    """
+    input_path = "/tmp/test_dupe_input.mp4"
+    output_path = "/tmp/test_dupe_output"
+
+    # Create a job
+    job = AV1EncodeJob(
+        input_file=File(fsfile=FSFile(path=input_path)),
+        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        crf=24,
+        seconds_per_segment=5,
+    )
+    # Submit the job
+    job_id = stub.SubmitJob(JobDetails(av1_encode_job=job)).id
+
+    # Pull the split task and finish it
+    task = stub.GetTask(GetTaskMessage(worker_id="dupe_worker"))
+    finish_request = FinishTaskMessage(
+        worker_id="dupe_worker",
+        task_id=task.id,
+        succeeded=True,
+        split_video_finish_message=SplitVideoFinishMessage(
+            generated_files=[
+                File(fsfile=FSFile(path=f"{output_path}/segment_{i}.mp4"))
+                for i in range(2)
+            ]
+        )
+    )
+
+    # Finish the split task twice
+    stub.FinishTask(finish_request)
+    stub.FinishTask(finish_request)
+
+    # Pull the job status and check if it is marked as failed/finished after splitting
+    job_status = stub.GetJob(JobId(id=job_id))
+    assert not job_status.failed, "Job should not be marked as failed"
+    assert not job_status.finished, "Job should not be finished after double call"

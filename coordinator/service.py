@@ -167,7 +167,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
                 db.execute(
                     """
                     UPDATE tasks
-                    SET completed = 1, error_message = ?
+                    SET completed = 1
                     WHERE job_id = ?
                     """,
                     (request.task_id,)

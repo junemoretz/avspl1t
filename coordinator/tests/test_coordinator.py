@@ -1,55 +1,17 @@
-import pytest
-import grpc
-import threading
-import time
-import json
 import sys
 
 sys.path.append('../')  # Adjust the path to import the main module
-from main import serve
 from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, FinishTaskMessage, SplitVideoFinishMessage, EncodeVideoFinishMessage, GenerateManifestFinishMessage, JobId, GetTaskMessage
-from proto.avspl1t_pb2_grpc import CoordinatorServiceStub
-from logic.db import DBLogic
 
-# This is a test for the Coordinator gRPC service.
-
-CONFIG_FILE = '../config.json'
-SCHEMA_FILE = '../schema.sql'
-
-
-@pytest.fixture(scope="module")
-def grpc_server():
-    """Fixture to start the gRPC server."""
-    db = DBLogic(config_file=CONFIG_FILE, schema_file=SCHEMA_FILE)
-    server_thread = threading.Thread(
-        target=serve, args=(db, f"{CONFIG_FILE}",), daemon=True)
-    server_thread.start()
-    time.sleep(0.5)  # Give the server time to start
-    yield
-
-
-@pytest.fixture
-def stub(grpc_server):
-    """Fixture to create a gRPC client stub.
-
-    :param grpc_server: The gRPC server fixture.
-    :return: A gRPC client stub for the CoordinatorService.
-    """
-    # read in host and port from config
-    with open(CONFIG_FILE, 'r') as f:
-        config = json.load(f)
-        host = config['host']
-        port = config['port']
-    channel = grpc.insecure_channel(f'{host}:{port}')
-    stub = CoordinatorServiceStub(channel)
-    yield stub
-    channel.close()
-
-# TESTS
+# This is a test for the full flow of the Coordinator gRPC service.
 
 
 def test_full_job_flow(stub):
-    """Test the full job flow from submission to completion."""
+    """
+    Test the full job flow from submission to completion.
+
+    :param stub: The gRPC client stub for the CoordinatorService.
+    """
     # Create a job
     input_path = "/path/to/input/file.mp4"
     output_path = "/path/to/output/directory"
@@ -68,7 +30,7 @@ def test_full_job_flow(stub):
         av1_encode_job=job,
     )
     job_id = stub.SubmitJob(job_details).id
-    assert job_id is not None
+    assert job_id is not None, "Job ID should not be None"
 
     # Pull the split task
     worker_id = "worker_1"
@@ -77,8 +39,8 @@ def test_full_job_flow(stub):
             worker_id=worker_id,
         )
     )
-    assert task is not None
-    assert task.split_video_task.input_file.fsfile.path == input_path
+    assert task is not None, "Task should not be None"
+    assert task.split_video_task.input_file.fsfile.path == input_path, "Input file path should match"
 
     # Finish the split task
     stub.FinishTask(
@@ -100,7 +62,8 @@ def test_full_job_flow(stub):
                 worker_id=worker_id,
             )
         )
-        assert encode_task is not None and encode_task.encode_video_task.crf == 23
+        assert encode_task is not None, "Encode task should not be None"
+        assert encode_task.encode_video_task.crf == 23, "CRF should match"
 
         stub.FinishTask(
             FinishTaskMessage(
@@ -120,13 +83,13 @@ def test_full_job_flow(stub):
             worker_id=worker_id,
         )
     )
-    assert manifest_task is not None
+    assert manifest_task is not None, "Manifest task should not be None"
     expected_paths = [f"{output_path}/segment_{i}.av1" for i in range(3)]
     actual_paths = [
         f.fsfile.path for f in manifest_task.generate_manifest_task.files]
     actual_paths = sorted(actual_paths)
 
-    assert actual_paths == expected_paths
+    assert actual_paths == expected_paths, "Manifest task should have correct file paths"
 
     stub.FinishTask(
         FinishTaskMessage(
@@ -144,5 +107,5 @@ def test_full_job_flow(stub):
     job_status = stub.GetJob(
         JobId(id=job_id)
     )
-    assert job_status.finished
-    assert job_status.percent_complete == 100
+    assert job_status.finished, "Job should be marked as finished"
+    assert job_status.percent_complete == 100, f"Job should be 100% complete"
