@@ -20,8 +20,9 @@ SCHEMA_FILE = '../schema.sql'
 def grpc_server():
     """Fixture to start the gRPC server."""
     db = DBLogic(config_file=CONFIG_FILE, schema_file=SCHEMA_FILE)
+    heartbeat = 1  # set manual heartbeat for testing
     server_thread = threading.Thread(
-        target=serve, args=(db, f"{CONFIG_FILE}",), daemon=True)
+        target=serve, args=(db, f"{CONFIG_FILE}", heartbeat), daemon=True)
     server_thread.start()
     time.sleep(0.5)  # Give the server time to start
     yield

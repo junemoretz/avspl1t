@@ -1,4 +1,5 @@
 import sys
+import time
 
 sys.path.append('../')  # Adjust the path to import the main module
 from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, FinishTaskMessage, SplitVideoFinishMessage, EncodeVideoFinishMessage, GenerateManifestFinishMessage, JobId, GetTaskMessage
@@ -109,3 +110,38 @@ def test_duplicate_finish_task_is_idempotent(stub):
     job_status = stub.GetJob(JobId(id=job_id))
     assert not job_status.failed, "Job should not be marked as failed"
     assert not job_status.finished, "Job should not be finished after double call"
+
+
+def test_heartbeat_and_reassignment(stub):
+    """
+    Test that a task can be reassigned after a heartbeat timeout.
+
+    :param stub: The gRPC client stub for the CoordinatorService.
+    """
+    input_path = "/tmp/test_reassign_input.mp4"
+    output_path = "/tmp/test_reassign_output"
+
+    # Create a job
+    job = AV1EncodeJob(
+        input_file=File(fsfile=FSFile(path=input_path)),
+        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        crf=20,
+        seconds_per_segment=4,
+    )
+
+    # Submit the job
+    stub.SubmitJob(JobDetails(av1_encode_job=job)).id
+
+    # Worker A pulls the task
+    task = stub.GetTask(GetTaskMessage(worker_id="worker_A"))
+    assert task is not None
+    task_id = task.id
+
+    # Wait for heartbeat timeout (assume config uses 1s for test env)
+    time.sleep(2)
+
+    # Worker B should be able to claim the task
+    reassigned = stub.GetTask(GetTaskMessage(worker_id="worker_B"))
+    assert reassigned.id == task_id, "Task should be reassigned to worker_B"
+    assert reassigned.split_video_task.input_file.fsfile.path == input_path, "Input file path should match"

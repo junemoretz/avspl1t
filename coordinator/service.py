@@ -13,11 +13,17 @@ CONFIG_FILE = 'config.json'
 
 
 class CoordinatorServicer(CoordinatorServiceServicer):
-    def __init__(self, database, config_file=CONFIG_FILE):
-        # set heartbeat timeout from config
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-            self.HEARTBEAT_TIMEOUT = config['heartbeatTimeout']
+    def __init__(self, database, heartbeat_timeout):
+        """
+        Initialize the CoordinatorServicer with a database and heartbeat timeout.
+
+        Args:
+            database (DBLogic): The database logic object.
+            heartbeat_timeout (int): The heartbeat timeout in seconds.
+        """
+
+        # set heartbeat timeout and database
+        self.HEARTBEAT_TIMEOUT = heartbeat_timeout
         self.database = database
 
     def SubmitJob(self, request, context):

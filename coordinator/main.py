@@ -10,11 +10,12 @@ from logic.db import DBLogic
 CONFIG_FILE = 'config.json'
 
 
-def serve(db, config_file=CONFIG_FILE):
+def serve(db, config_file=CONFIG_FILE, manual_heartbeat=-1):
     """Serve the gRPC server.
     Args:
         db (DBLogic): The database logic object.
         config_file (str): Path to the configuration file.
+        manual_heartbeat (int): Manual heartbeat timeout.
     """
     # read in config details
     with open(config_file, 'r') as f:
@@ -22,9 +23,11 @@ def serve(db, config_file=CONFIG_FILE):
         host = config['host']
         port = config['port']
         max_workers = config['maxWorkers']
+        heartbeat_timeout = config['heartbeatTimeout'] if manual_heartbeat == - \
+            1 else manual_heartbeat
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     add_CoordinatorServiceServicer_to_server(
-        CoordinatorServicer(db, config_file=config_file), server
+        CoordinatorServicer(db, heartbeat_timeout), server
     )
     server.add_insecure_port(f'{host}:{port}')
     server.start()
