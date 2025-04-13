@@ -2,11 +2,11 @@
 
 import sqlite3
 import json
-from datetime import timezone
+from datetime import datetime, timezone
 from google.protobuf.timestamp_pb2 import Timestamp
 
-CONFIG_FILE = 'config.json'
-SCHEMA_FILE = 'schema.sql'
+CONFIG_FILE = '../config.json'
+SCHEMA_FILE = '../schema.sql'
 
 
 def get_db():
@@ -49,6 +49,8 @@ def timestamp_from_sql(dt):
     if not dt:
         # Return a default Timestamp if dt is None
         return Timestamp()
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt)
     if dt.tzinfo is None:
         # If the datetime object is naive, set it to UTC
         dt = dt.replace(tzinfo=timezone.utc)

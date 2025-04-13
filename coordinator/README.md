@@ -26,6 +26,18 @@ poetry run python main.py
 
 ## Testing
 
-Clear your `.db` file (e.g., "test.db") before running the automated tests.
+1. Clear your `.db` file (e.g., "test.db") before running the automated tests.
+
+2. Navigate into [tests/](tests/) folder:
+
+```
+cd tests
+```
+
+3. Start tests:
+
+```
+poetry run pytest
+```
 
 (in progress)

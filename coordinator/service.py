@@ -4,7 +4,7 @@ import grpc
 from proto.avspl1t_pb2_grpc import CoordinatorServiceServicer
 from proto.avspl1t_pb2 import JobId, Job, Task, Empty
 
-from db import get_db
+from logic.db import get_db
 from logic.job import create_job, get_job
 from logic.task import assign_next_task, build_task_proto, handle_split_finish, handle_encode_finish, handle_manifest_finish
 
@@ -14,9 +14,9 @@ CONFIG_FILE = 'config.json'
 
 
 class CoordinatorServicer(CoordinatorServiceServicer):
-    def __init__(self):
+    def __init__(self, config_file=CONFIG_FILE):
         # set heartbeat timeout from config
-        with open(CONFIG_FILE, 'r') as f:
+        with open(config_file, 'r') as f:
             config = json.load(f)
             self.HEARTBEAT_TIMEOUT = config['heartbeatTimeout']
 
@@ -32,7 +32,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during job submission.
         """
-        if not request.hasField("av1_encode_job"):
+        if not request.HasField("av1_encode_job"):
             # If the request does not contain an AV1EncodeJob field, set the error code and details
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details("Missing AV1EncodeJob field")
@@ -191,7 +191,7 @@ class CoordinatorServicer(CoordinatorServiceServicer):
                     SET output_file = ?
                     WHERE id = ?
                     """,
-                    (request.encode_video_finish_message.output_file.fsfile.path,
+                    (request.encode_video_finish_message.generated_file.fsfile.path,
                      request.task_id)
                 )
 

@@ -1,5 +1,5 @@
 # Handle Job-level Logic for Coordinator
-from db import get_db, timestamp_from_sql
+from logic.db import get_db, timestamp_from_sql
 from proto.avspl1t_pb2 import Job, File, FSFile, Folder, FSFolder, JobDetails, AV1EncodeJob
 
 
@@ -19,16 +19,18 @@ def create_job(job):
     seconds_per_segment = job.seconds_per_segment
 
     with get_db() as db:
-        cur = db.execute(
-            "INSERT INTO jobs (input_path, output_dir, crf, seconds_per_segment) VALUES (?, ?, ?, ?)",
+        # add the job to the database
+        db.execute(
+            "INSERT INTO jobs (input_file, output_dir, crf, seconds_per_segment) VALUES (?, ?, ?, ?)",
             (input_path, output_path, crf, seconds_per_segment),
         )
 
         # get the job ID of the newly created job
-        job_id = cur.fetchone()[0]
+        job_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
+        # create the split task
         db.execute(
-            "INSERT INTO job_files (job_id, type, input_file, output_dir, crf) VALUES (?, 'split', ?, ?, ?)",
+            "INSERT INTO tasks (job_id, type, input_file, output_dir, crf) VALUES (?, 'split', ?, ?, ?)",
             (job_id, input_path, output_path, crf),
         )
 
@@ -48,7 +50,7 @@ def get_job(job_id):
         job = db.execute(
             "SELECT * FROM jobs WHERE id = ?",
             (job_id,),
-        ).fetchone()[0]
+        ).fetchone()
         if not job:
             return None
 
@@ -61,7 +63,7 @@ def get_job(job_id):
             "SELECT COUNT(*) FROM tasks WHERE job_id = ? AND completed = 1",
             (job_id,),
         ).fetchone()[0]
-        percent_complete = (completed / total) * 100 if total > 0 else 0
+        percent_complete = int((completed / total) * 100) if total > 0 else 0
 
         # create a Job object
         job_details = JobDetails(

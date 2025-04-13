@@ -2,11 +2,11 @@
 
 import json
 from datetime import datetime, timezone, timedelta
-from db import get_db, timestamp_from_sql
+from logic.db import get_db, timestamp_from_sql
 from proto.avspl1t_pb2 import Task, File, FSFile, Folder, FSFolder, SplitVideoTask, EncodeVideoTask, GenerateManifestTask
 
 
-CONFIG_FILE = 'config.json'
+CONFIG_FILE = '../config.json'
 
 # get heartbeat timeout from config
 with open(CONFIG_FILE, 'r') as f:
@@ -110,15 +110,19 @@ def handle_split_finish(db, task, request):
         task (dict): The task details.
         request (Task): The Task object containing task details.
     """
-    for i, f in enumerate(request.split_video_finish_message.generated_files):
-        # Add encode tasks for each generated file
+    # Extract and sort file paths first
+    file_paths = sorted(
+        [f.fsfile.path for f in request.split_video_finish_message.generated_files]
+    )
+
+    # Update the task with the output file paths
+    for i, path in enumerate(file_paths):
         db.execute(
             """
             INSERT INTO tasks (job_id, type, input_file, output_dir, crf, task_index)
             VALUES (?, 'encode', ?, ?, ?, ?)
             """,
-            (task['job_id'], f.fsfile.path,
-                task['output_dir'], task['crf'], i)
+            (task['job_id'], path, task['output_dir'], task['crf'], i)
         )
 
 

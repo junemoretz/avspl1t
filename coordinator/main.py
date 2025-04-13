@@ -5,21 +5,22 @@ from proto.avspl1t_pb2_grpc import add_CoordinatorServiceServicer_to_server
 
 from concurrent import futures
 from service import CoordinatorServicer
-from db import init_db
+from logic.db import init_db
+import os
 
 CONFIG_FILE = 'config.json'
 
 
-def serve():
+def serve(config_file=CONFIG_FILE):
     # read in config details
-    with open(CONFIG_FILE, 'r') as f:
+    with open(config_file, 'r') as f:
         config = json.load(f)
         host = config['host']
         port = config['port']
         max_workers = config['maxWorkers']
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     add_CoordinatorServiceServicer_to_server(
-        CoordinatorServicer(), server
+        CoordinatorServicer(config_file=config_file), server
     )
     server.add_insecure_port(f'{host}:{port}')
     server.start()
