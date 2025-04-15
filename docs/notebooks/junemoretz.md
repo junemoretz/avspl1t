@@ -69,3 +69,11 @@ I've completed the beginnings of the worker, including methods for all the worke
 _Update 2_
 
 Splitting is done! This required some difficult technical decisions, mostly around writing my FFmpeg command, along with a lot of debugging - the version of the filesystem commands I had written was wrong in a lot of ways that I've now identified. I realized that keyframes prevent splitting the video into equal length segments, so the FFmpeg command needs to re-encode video - I'm using H.264 ultrafast with crf 17 for this, which should be very fast and essentially lossless, and force all the segments to be the correct length. Everything seems to be working now - on to the next few tasks!
+
+_Update 3_
+
+I've now also written a draft of encoding - and learned a few things in the process!
+
+- You can't put AV1 in a .ts container. It has to be "fragmented MP4" instead, which requires an init file to provide certain of the elements that aren't included in individual fragments. Hadn't realized this, and it does mean I need to coerce FFmpeg into generating individual MP4 fragments... I've tried an approach for this (treating it like a single-segment HLS encode and then only copying the init file if it's the first segment), but it remains to be seen if this will actually work.
+- I forgot to add the index attribute to the video encode task message! I had written docs about this, but managed to overlook putting it in the proto. This will also require Catherine to make a few tweaks to the coordinator - I'll need to wait on integration testing until that is done.
+- AV1 is complicated. There are several encoders (I chose rav1e, which seems to be fairly good), and a lot of parameters we're simply ignoring here. Definitely some inherent limitations to this approach, but it's a proof of concept - I'm just hopeful we can get something that roughly works.

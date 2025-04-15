@@ -80,6 +80,7 @@ message EncodeVideoTask {
   File input_file = 1;
   Folder output_directory = 2;
   int32 crf = 3;
+  int32 index = 4;
 }
 
 message EncodeVideoFinishMessage { File generated_file = 1; }

@@ -39,7 +39,7 @@ def client():
 @click.option('--outputDir', type=click.Path(exists=False, file_okay=False, path_type=Path), help='Output directory')
 @click.option('--outputDirS3', help='Output directory (Amazon S3)')
 @click.option('--secondsPerSegment', default=2, help='Seconds in each generated HLS video segment')
-@click.option('--crf', default=28, help='Constant Rate Factor (video quality) - lower is better')
+@click.option('--crf', default=80, help='Constant Rate Factor (video quality) - lower is better')
 def create(input, uploadtos3, workingdir, workingdirs3, outputdir, outputdirs3, secondspersegment, crf):
     # Input validation
     if ((not 's3' in config or not validateS3()) and (uploadtos3 or workingdirs3 or outputdirs3)):
