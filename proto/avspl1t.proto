@@ -88,6 +88,7 @@ message EncodeVideoFinishMessage { File generated_file = 1; }
 message GenerateManifestTask {
   repeated File files = 1;
   Folder output_directory = 2;
+  int32 seconds_per_segment = 3;
 }
 
 message GenerateManifestFinishMessage { File generated_file = 1; }

@@ -3,12 +3,14 @@ import time
 import os
 import subprocess
 import threading
+import filecmp
 from pathlib import Path
 
 sys.path.append('../')  # Adjust the path to import the main module
 from logic.splitVideo import split_video
 from logic.encodeVideo import encode_video
-from proto.avspl1t_pb2 import Task, SplitVideoTask, EncodeVideoTask, File, FSFile, Folder, FSFolder
+from logic.generateManifest import generate_manifest
+from proto.avspl1t_pb2 import Task, SplitVideoTask, EncodeVideoTask, GenerateManifestTask, File, FSFile, Folder, FSFolder
 
 def test_split_video():
   input = str(Path('resources/video.mp4').absolute())
@@ -33,3 +35,18 @@ def test_encode_video():
   # Check output
   pathlist = list(Path(output).glob("output_*"))
   assert len(pathlist) == 1, "Encoded segment should be generated"
+
+def test_generate_manifest():
+  input = str(Path('resources/output_0.m4s').absolute())
+  inputFile = File(fsfile=FSFile(path=input))
+  input2 = str(Path('resources/output_1.m4s').absolute())
+  inputFile2 = File(fsfile=FSFile(path=input2))
+  output = str(Path('output').absolute())
+  outputFolder = Folder(fsfolder=FSFolder(path=output))
+  generate_task = GenerateManifestTask(files=[inputFile,inputFile2],output_directory=outputFolder,seconds_per_segment=3)
+  task = Task(id="1", generate_manifest_task=generate_task)
+  generate_manifest(task)
+  # Check output
+  pathlist = list(Path(output).glob("manifest.m3u8"))
+  assert len(pathlist) == 1, "Manifest should be generated"
+  assert filecmp.cmp('output/manifest.m3u8', 'resources/manifest.m3u8')
