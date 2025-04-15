@@ -70,7 +70,7 @@ Encode tasks should be created. For each generated file in the split video finis
 
 **Encode task**
 
-If all other encode tasks are also finished, a generate manifest task should be created. All encode tasks include a File for the created segment in their finish message. These Files should be come the Files for the generate manifest task, in order of the index of the encode task. Ordering is important here and must be maintained.
+If all other encode tasks are also finished, a generate manifest task should be created. All encode tasks include a File for the created segment in their finish message. These Files should be come the Files for the generate manifest task, in order of the index of the encode task. The output directory for the encode task and generate manifest task should be the same. Ordering is important here and must be maintained.
 
 **Generate manifest task**
 

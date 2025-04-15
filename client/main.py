@@ -1,9 +1,12 @@
 import click
 import json
 import grpc
+import os
 from pathlib import Path
 from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, JobId, Job
 from proto.avspl1t_pb2_grpc import CoordinatorServiceStub
+
+TEST_PORT=51515
 
 # Load config file
 config = None
@@ -12,6 +15,9 @@ with open('config.json', 'r') as f:
     config = json.load(f)
     host = config['host']
     port = config['port']
+    if (os.environ.get('TESTING')):
+        host = 'localhost'
+        port = TEST_PORT
     channel = grpc.insecure_channel(f'{host}:{port}')
     stub = CoordinatorServiceStub(channel)
 
@@ -35,16 +41,16 @@ def create(input, uploadtos3, workingdir, workingdirs3, outputdir, outputdirs3, 
     # Input validation
     if ((not 's3' in config or not validateS3()) and (uploadtos3 or workingdirs3 or outputdirs3)):
         click.echo("You must configure S3 in config.json to use S3!")
-        return
+        exit(1)
     if (not input):
         click.echo("An input file is required.")
-        return
+        exit(1)
     if (not workingdir and not workingdirs3):
         click.echo("You must specify a working directory.")
-        return
+        exit(1)
     if (not outputdir and not outputdirs3):
         click.echo("You must specify an output directory.")
-        return
+        exit(1)
     # Create directories if needed
     workingdir.mkdir(parents=True, exist_ok=True)
     outputdir.mkdir(parents=True, exist_ok=True)
@@ -53,11 +59,11 @@ def create(input, uploadtos3, workingdir, workingdirs3, outputdir, outputdirs3, 
     working = None
     output = None
     if not uploadtos3:
-        input_protofile = File(fsfile=FSFile(path=str(input)))
+        input_protofile = File(fsfile=FSFile(path=str(input.absolute())))
     if workingdir:
-        working = Folder(fsfolder=FSFolder(path=str(workingdir)))
+        working = Folder(fsfolder=FSFolder(path=str(workingdir.absolute())))
     if outputdir:
-        output = Folder(fsfolder=FSFolder(path=str(outputdir)))
+        output = Folder(fsfolder=FSFolder(path=str(outputdir.absolute())))
     job = AV1EncodeJob(
         input_file=input_protofile,
         output_directory=output,
@@ -75,7 +81,7 @@ def create(input, uploadtos3, workingdir, workingdirs3, outputdir, outputdirs3, 
 def get(id):
     if (not id):
         click.echo("You must specify a job ID.")
-        return
+        exit(1)
     # Construct and submit Protobuf request
     job_status = stub.GetJob(JobId(id=id))
     # Handle response
