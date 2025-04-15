@@ -65,3 +65,7 @@ Now that this is complete, I can move on to writing the worker. It'll be able to
 _Update 1_
 
 I've completed the beginnings of the worker, including methods for all the worker-coordinator communication (and unit tests for these methods) and the filesystem logic, with unfilled methods for S3 and completed methods for FS filesystem methods. Going to move on to trying to draft the actual logic components. I'll hopefully be able to get at least one of these done today! They should all follow somewhat similar patterns, so once I have one fully working and tested, it's just the detail-oriented bits (how to actually work with the video/HLS data) that need to be refined. That's the part I'll need to put the most thought into, so it'll be good to have the rest out of the way.
+
+_Update 2_
+
+Splitting is done! This required some difficult technical decisions, mostly around writing my FFmpeg command, along with a lot of debugging - the version of the filesystem commands I had written was wrong in a lot of ways that I've now identified. I realized that keyframes prevent splitting the video into equal length segments, so the FFmpeg command needs to re-encode video - I'm using H.264 ultrafast with crf 17 for this, which should be very fast and essentially lossless, and force all the segments to be the correct length. Everything seems to be working now - on to the next few tasks!

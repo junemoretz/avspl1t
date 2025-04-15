@@ -3,26 +3,39 @@ from pathlib import Path
 import tempfile
 import shutil
 
-def download_s3_file(S3File source, Path destination):
+def download_s3_file(source, destination):
   pass
   
-def upload_s3_file(S3Folder folder, Path source):
+def upload_s3_file(folder, source):
   pass
 
-def download_fs_file(FSFile source, Path destination):
+def download_fs_file(source, destination):
   shutil.copy(source.path, destination)
 
-def upload_fs_file(FSFolder folder, Path source):
-  shutil.copy(source, folder.path)
+def upload_fs_file(folder, source):
+  path = shutil.copy(source, folder.path)
+  return File(fsfile=FSFile(path=path))
 
-def download_file(File source, Path destination):
+def download_file(source, destination):
   if source.fsfile:
-    download_fs_file(source, destination)
+    download_fs_file(source.fsfile, destination)
   elif source.s3file:
-    download_s3_file(source, destination)
+    download_s3_file(source.s3file, destination)
 
-def upload_file(Folder folder, Path source):
+def upload_file(folder, source):
   if folder.fsfolder:
-    upload_fs_file(folder, source)
+    return upload_fs_file(folder.fsfolder, source)
   elif folder.s3folder:
-    upload_s3_file(folder, source)
+    return upload_s3_file(folder.s3folder, source)
+
+def file_to_ext(file):
+  if file.fsfile:
+    return file.fsfile.path.split(".")[-1]
+  elif file.s3file:
+    return file.s3file.path.split(".")[-1]
+
+def file_to_name(file):
+  if file.fsfile:
+    return file.fsfile.path.split("/")[-1]
+  elif file.s3file:
+    return file.s3file.path.split("/")[-1]

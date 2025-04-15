@@ -4,3 +4,4 @@ poetry.lock
 client/tests/logs
 config.json
 *.db
+worker/tests/output
