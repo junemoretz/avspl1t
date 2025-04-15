@@ -39,3 +39,19 @@ I created the GitHub repository for the project and started on the overall archi
 ### An Inevitable (For Now) Weakness
 
 Splitting a video file before encoding it essentially deprives the video codec of the ability to decide where keyframes should be placed. Keyframes are an important part of the video codec, and bad keyframe placement increases bitrate, even when using a better codec. Since the segmented approach used here can break proper keyframe placement, it may result in some quality or bitrate tradeoffs at the moment. This system is largely a proof of concept, and also is built without tight integration with the underlying video codec - we could switch AV1 for any other codec without too many changes. A first pass keyframing step would improve the performance and utility of a system like this, but is impractical for us to implement here. Rigid keyframing like this, however, is common already when generating HLS encodes, or even just streamable video encodes more generally, and thus is at least not a weakness specific to this approach.
+
+## April 14, 2025
+
+I've been taking a break from this project recently as I have been busy with other schoolwork - I'm returning to it now! I've completed an early draft of the documentation, and realized that I had missed a necessary field in one of the protobuf messages while doing so (an output directory for generated HLS manifests) - this has now been corrected! I wouldn't be surprised if I run into more similar issues as I continue.
+
+Today I'm planning to get somewhat of a start on the client. I'm going to write it in Python, to match with the work Catherine has been doing. As I'm not an expert on how to build CLIs in Python, this might take some research! I'll also have to figure out how to build test handling and a mock server, but can likely borrow some of this from what Catherine has already written.
+
+I've figured out how to generate the compiled proto files:
+
+```
+python -m grpc_tools.protoc -I./proto --python_out=client/proto --grpc_python_out=client/proto proto/avspl1t.proto
+```
+
+(from the root directory). I know Catherine's done this a lot before, but it's my first time using Python rather than Java for gRPC/Protobuf!
+
+With a bit of work, I've finished a simple client. I used a CLI library to make building this a little easier and more user friendly. It's very simple right now - only around 100 lines of code - but it can generate job details and submit them to the server! No S3 support yet, as I'm putting that off until everything works with local files - it should slide cleanly on top of the existing code. I'll also need to write some tests for the client, which I'm planning to do tomorrow. (Note to myself tomorrow: I think the easiest way to handle the server config for testing is to short-circuit it with an environment variable.)

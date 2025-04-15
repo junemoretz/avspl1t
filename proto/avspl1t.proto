@@ -24,13 +24,9 @@ message S3Folder {
   S3Credentials credentials = 3;
 }
 
-message FSFile {
-  string path = 1;
-}
+message FSFile { string path = 1; }
 
-message FSFolder {
-  string path = 1;
-}
+message FSFolder { string path = 1; }
 
 message File {
   oneof file {
@@ -46,7 +42,6 @@ message Folder {
   }
 }
 
-
 // Jobs
 message AV1EncodeJob {
   File input_file = 1;
@@ -57,9 +52,7 @@ message AV1EncodeJob {
 }
 
 message JobDetails {
-  oneof job {
-    AV1EncodeJob av1_encode_job = 1;
-  }
+  oneof job { AV1EncodeJob av1_encode_job = 1; }
 }
 
 message Job {
@@ -72,9 +65,7 @@ message Job {
   google.protobuf.Timestamp created_at = 7;
 }
 
-message JobId {
-  string id = 1;
-}
+message JobId { string id = 1; }
 
 // Tasks
 message SplitVideoTask {
@@ -83,9 +74,7 @@ message SplitVideoTask {
   int32 seconds_per_segment = 3;
 }
 
-message SplitVideoFinishMessage {
-  repeated File generated_files = 1;
-}
+message SplitVideoFinishMessage { repeated File generated_files = 1; }
 
 message EncodeVideoTask {
   File input_file = 1;
@@ -93,17 +82,14 @@ message EncodeVideoTask {
   int32 crf = 3;
 }
 
-message EncodeVideoFinishMessage {
-  File generated_file = 1;
-}
+message EncodeVideoFinishMessage { File generated_file = 1; }
 
 message GenerateManifestTask {
   repeated File files = 1;
+  Folder output_directory = 2;
 }
 
-message GenerateManifestFinishMessage {
-  File generated_file = 1;
-}
+message GenerateManifestFinishMessage { File generated_file = 1; }
 
 message Task {
   string id = 1;
@@ -115,9 +101,7 @@ message Task {
   google.protobuf.Timestamp created_at = 5;
 }
 
-message GetTaskMessage {
-  string worker_id = 1;
-}
+message GetTaskMessage { string worker_id = 1; }
 
 message HeartbeatMessage {
   string worker_id = 1;

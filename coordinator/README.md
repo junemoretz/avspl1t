@@ -14,6 +14,8 @@ This folder contains the coordinator server implementation for the avspl1t syste
 poetry install
 ```
 
+Note that Poetry dependencies are shared between all components of the avspl1t system. You only need to run this command once, no matter which of the three components you're looking to run.
+
 ## Usage
 
 1. Start coordinator (make sure you are in the coordinator folder):
