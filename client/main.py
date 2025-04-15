@@ -22,6 +22,9 @@ with open('config.json', 'r') as f:
     stub = CoordinatorServiceStub(channel)
 
 def validateS3():
+    # todo!
+    # remove trailing slash if needed
+    # ensure format is bucket:path
     return True
 
 @click.group()

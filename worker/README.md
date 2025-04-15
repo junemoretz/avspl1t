@@ -8,6 +8,7 @@ This folder contains the worker implementation for the avspl1t system. Worker in
 
    - Fill in your configuration details.
    - The host and port are for the coordinator server to be used.
+   - The worker ID must be unique.
 
 2. Install the python dependencies for the server (this requires `poetry` to be installed):
 
@@ -21,8 +22,24 @@ Note that Poetry dependencies are shared between all components of the avspl1t s
 
 ## Usage
 
-(todo!)
+To run the worker, run:
+
+```
+poetry run python main.py
+```
+
+The worker will continue running until stopped.
 
 ## Testing
 
-(todo!)
+1. Navigate into [tests/](tests/) folder:
+
+```
+cd tests
+```
+
+2. Start tests:
+
+```
+poetry run pytest
+```

@@ -46,4 +46,14 @@ poetry run python main.py get --id [id]
 
 ## Testing
 
-(todo!)
+1. Navigate into [tests/](tests/) folder:
+
+```
+cd tests
+```
+
+2. Start tests:
+
+```
+poetry run pytest
+```
