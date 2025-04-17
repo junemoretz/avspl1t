@@ -56,7 +56,8 @@ def test_full_job_flow(stub):
     )
 
     # Pull and finish encode tasks
-    for i in range(3):
+    total_tasks = 3
+    for i in range(total_tasks):
         encode_task = stub.GetTask(
             GetTaskMessage(
                 worker_id=worker_id,
@@ -64,6 +65,7 @@ def test_full_job_flow(stub):
         )
         assert encode_task is not None, "Encode task should not be None"
         assert encode_task.encode_video_task.crf == 23, "CRF should match"
+        assert encode_task.encode_video_task.index < total_tasks, f"Index should be less than {total_tasks}"
 
         stub.FinishTask(
             FinishTaskMessage(
@@ -90,6 +92,8 @@ def test_full_job_flow(stub):
     actual_paths = sorted(actual_paths)
 
     assert actual_paths == expected_paths, "Manifest task should have correct file paths"
+    assert manifest_task.generate_manifest_task.seconds_per_segment == 10, "Seconds per segment should match"
+    assert manifest_task.generate_manifest_task.output_directory.fsfolder.path == output_path, f"Output directory should match, got: {manifest_task.generate_manifest_task.output_directory.fsfolder.path}"
 
     stub.FinishTask(
         FinishTaskMessage(

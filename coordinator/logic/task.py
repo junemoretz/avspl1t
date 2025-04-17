@@ -65,7 +65,8 @@ def build_task_proto(database, task, job):
                 input_file=File(fsfile=FSFile(path=task['input_file'])),
                 output_directory=Folder(
                     fsfolder=FSFolder(path=task['output_dir'])),
-                crf=task['crf']
+                crf=task['crf'],
+                index=task['task_index'],
             )
         )
     elif task['type'] == 'manifest':
@@ -84,6 +85,9 @@ def build_task_proto(database, task, job):
                         )
                         for et in manifest_files if et['output_file']
                     ],
+                    output_directory=Folder(
+                        fsfolder=FSFolder(path=task['output_dir'])),
+                    seconds_per_segment=job['seconds_per_segment'],
                 ),
             )
     else:
@@ -136,9 +140,9 @@ def handle_encode_finish(db, task):
     if remaining == 0:
         db.execute(
             """
-            INSERT INTO tasks (job_id, type) VALUES (?, 'manifest')
+            INSERT INTO tasks (job_id, type, output_dir) VALUES (?, 'manifest', ?)
             """,
-            (task['job_id'],)
+            (task['job_id'], task['output_dir'])
         )
 
 
