@@ -1,4 +1,5 @@
 {
+  "databaseType": "postgres",
   "databaseFile": "avspl1t",
   "postgresUser": "user",
   "postgresPassword": "password",

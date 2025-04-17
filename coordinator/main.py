@@ -10,7 +10,7 @@ from logic.db import DBLogic
 CONFIG_FILE = 'config.json'
 
 
-def serve(db, config_file=CONFIG_FILE, manual_heartbeat=-1):
+def serve(db, db_type, config_file=CONFIG_FILE, manual_heartbeat=-1):
     """Serve the gRPC server.
     Args:
         db (DBLogic): The database logic object.
@@ -29,7 +29,7 @@ def serve(db, config_file=CONFIG_FILE, manual_heartbeat=-1):
     # It does NOT limit the number of worker clients that can connect or run.
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     add_CoordinatorServiceServicer_to_server(
-        CoordinatorServicer(db, heartbeat_timeout), server
+        CoordinatorServicer(db, db_type, heartbeat_timeout), server
     )
     server.add_insecure_port(f'{host}:{port}')
     server.start()
@@ -39,4 +39,5 @@ def serve(db, config_file=CONFIG_FILE, manual_heartbeat=-1):
 
 if __name__ == '__main__':
     db = DBLogic(config_file=CONFIG_FILE)
-    serve(db)
+    db_type = db.db_type
+    serve(db, db_type)
