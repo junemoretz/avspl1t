@@ -1,6 +1,6 @@
 # Handle Job-level Logic for Coordinator
-from logic.utils import timestamp_from_sql
-from proto.avspl1t_pb2 import Job, File, FSFile, Folder, FSFolder, JobDetails, AV1EncodeJob
+from logic.utils import get_path_from_file, get_path_from_folder, file_from_path, folder_from_path, timestamp_from_sql
+from proto.avspl1t_pb2 import Job, JobDetails, AV1EncodeJob
 
 
 def create_job(database, job):
@@ -14,8 +14,8 @@ def create_job(database, job):
     Returns:
         str: The ID of the created job.
     """
-    input_path = job.input_file.fsfile.path
-    output_path = job.output_directory.fsfolder.path
+    input_path = get_path_from_file(job.input_file)
+    output_path = get_path_from_folder(job.output_directory)
     crf = job.crf
     seconds_per_segment = job.seconds_per_segment
 
@@ -81,11 +81,9 @@ def get_job(database, job_id):
         # create a Job object
         job_details = JobDetails(
             av1_encode_job=AV1EncodeJob(
-                input_file=File(fsfile=FSFile(path=job['input_file'])),
-                output_directory=Folder(
-                    fsfolder=FSFolder(path=job['output_dir'])),
-                working_directory=Folder(
-                    fsfolder=FSFolder(path=job['output_dir'])),
+                input_file=file_from_path(job['input_file']),
+                output_directory=folder_from_path(job['output_dir']),
+                working_directory=folder_from_path(job['output_dir']),
                 crf=job['crf'],
                 seconds_per_segment=job['seconds_per_segment'],
             )
@@ -96,8 +94,7 @@ def get_job(database, job_id):
             finished=(job['status'] == 'complete'),
             failed=(job['status'] == 'failed'),
             percent_complete=percent_complete,
-            generated_manifest=File(fsfile=FSFile(
-                path=job['manifest_file'] or '')),
+            generated_manifest=file_from_path(job['manifest_file'] or ""),
             job_details=job_details,
             created_at=timestamp_from_sql(job['created_at']),
         )

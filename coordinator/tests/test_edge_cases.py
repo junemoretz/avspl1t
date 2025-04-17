@@ -2,7 +2,8 @@ import sys
 import time
 
 sys.path.append('../')  # Adjust the path to import the main module
-from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, FinishTaskMessage, SplitVideoFinishMessage, EncodeVideoFinishMessage, GenerateManifestFinishMessage, JobId, GetTaskMessage
+from logic.utils import file_from_path, folder_from_path
+from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FinishTaskMessage, SplitVideoFinishMessage, JobId, GetTaskMessage
 
 # This is a test for edge cases for the Coordinator gRPC service.
 
@@ -15,12 +16,14 @@ def test_get_job_initial_status(stub):
     """
     input_path = "/tmp/test_input_initial.mp4"
     output_path = "/tmp/test_output_initial"
+    input_file = file_from_path(input_path)
+    output_directory = folder_from_path(output_path)
 
     # Create a job
     job = AV1EncodeJob(
-        input_file=File(fsfile=FSFile(path=input_path)),
-        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
-        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        input_file=input_file,
+        output_directory=output_directory,
+        working_directory=output_directory,
         crf=22,
         seconds_per_segment=5,
     )
@@ -41,12 +44,14 @@ def test_failed_task_marks_job_failed(stub):
     """
     input_path = "/tmp/test_fail_input.mp4"
     output_path = "/tmp/test_fail_output"
+    input_file = file_from_path(input_path)
+    output_directory = folder_from_path(output_path)
 
     # Create a job
     job = AV1EncodeJob(
-        input_file=File(fsfile=FSFile(path=input_path)),
-        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
-        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        input_file=input_file,
+        output_directory=output_directory,
+        working_directory=output_directory,
         crf=30,
         seconds_per_segment=6,
     )
@@ -76,12 +81,14 @@ def test_duplicate_finish_task_is_idempotent(stub):
     """
     input_path = "/tmp/test_dupe_input.mp4"
     output_path = "/tmp/test_dupe_output"
+    input_file = file_from_path(input_path)
+    output_directory = folder_from_path(output_path)
 
     # Create a job
     job = AV1EncodeJob(
-        input_file=File(fsfile=FSFile(path=input_path)),
-        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
-        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        input_file=input_file,
+        output_directory=output_directory,
+        working_directory=output_directory,
         crf=24,
         seconds_per_segment=5,
     )
@@ -96,7 +103,7 @@ def test_duplicate_finish_task_is_idempotent(stub):
         succeeded=True,
         split_video_finish_message=SplitVideoFinishMessage(
             generated_files=[
-                File(fsfile=FSFile(path=f"{output_path}/segment_{i}.mp4"))
+                file_from_path(f"{output_path}/segment_{i}.mp4")
                 for i in range(2)
             ]
         )
@@ -120,12 +127,14 @@ def test_heartbeat_and_reassignment(stub):
     """
     input_path = "/tmp/test_reassign_input.mp4"
     output_path = "/tmp/test_reassign_output"
+    input_file = file_from_path(input_path)
+    output_directory = folder_from_path(output_path)
 
     # Create a job
     job = AV1EncodeJob(
-        input_file=File(fsfile=FSFile(path=input_path)),
-        output_directory=Folder(fsfolder=FSFolder(path=output_path)),
-        working_directory=Folder(fsfolder=FSFolder(path=output_path)),
+        input_file=input_file,
+        output_directory=output_directory,
+        working_directory=output_directory,
         crf=20,
         seconds_per_segment=4,
     )

@@ -1,7 +1,7 @@
 # Handle Task-level Logic for Coordinator
 from datetime import datetime, timezone, timedelta
-from logic.utils import timestamp_from_sql
-from proto.avspl1t_pb2 import Task, File, FSFile, Folder, FSFolder, SplitVideoTask, EncodeVideoTask, GenerateManifestTask
+from logic.utils import timestamp_from_sql, get_path_from_file, file_from_path, folder_from_path
+from proto.avspl1t_pb2 import Task, SplitVideoTask, EncodeVideoTask, GenerateManifestTask
 
 
 def assign_next_task(database, worker_id, heartbeat_timeout):
@@ -30,14 +30,13 @@ def assign_next_task(database, worker_id, heartbeat_timeout):
 
             # No available task meets assignment conditions; return None
             if not task:
-                conn.commit()
                 return None
             # Else, mark the task as assigned to the worker
             cur.execute(
                 "UPDATE tasks SET assigned_worker = %s, last_heartbeat = %s WHERE id = %s",
                 (worker_id, now, task['id']),
             )
-            conn.commit()
+            print(f"Assigned task {task['id']} to worker {worker_id}")
             return task
 
 
@@ -53,22 +52,26 @@ def build_task_proto(database, task, job):
     """
     now = datetime.now(timezone.utc)
 
+    input_file = None
+    if task['type'] == 'split' or task['type'] == 'encode':
+        # only split and encode tasks have input files
+        input_file = file_from_path(task['input_file'])
+    output_directory = folder_from_path(task['output_dir'])
+
     # construct correct task object based on type
     if task['type'] == 'split':
         task_obj = Task(
             split_video_task=SplitVideoTask(
-                input_file=File(fsfile=FSFile(path=task['input_file'])),
-                output_directory=Folder(
-                    fsfolder=FSFolder(path=task['output_dir'])),
+                input_file=input_file,
+                output_directory=output_directory,
                 seconds_per_segment=job['seconds_per_segment']
             )
         )
     elif task['type'] == 'encode':
         task_obj = Task(
             encode_video_task=EncodeVideoTask(
-                input_file=File(fsfile=FSFile(path=task['input_file'])),
-                output_directory=Folder(
-                    fsfolder=FSFolder(path=task['output_dir'])),
+                input_file=input_file,
+                output_directory=output_directory,
                 crf=task['crf'],
                 index=task['task_index'],
             )
@@ -86,14 +89,10 @@ def build_task_proto(database, task, job):
             task_obj = Task(
                 generate_manifest_task=GenerateManifestTask(
                     files=[
-                        File(
-                            fsfile=FSFile(
-                                path=et['output_file']),
-                        )
+                        file_from_path(et['output_file'])
                         for et in manifest_files if et['output_file']
                     ],
-                    output_directory=Folder(
-                        fsfolder=FSFolder(path=task['output_dir'])),
+                    output_directory=output_directory,
                     seconds_per_segment=job['seconds_per_segment'],
                 ),
             )
@@ -115,9 +114,8 @@ def handle_split_finish(conn, task, request):
         request (Task): The Task object containing task details.
     """
     # Extract and sort file paths first
-    file_paths = sorted(
-        [f.fsfile.path for f in request.split_video_finish_message.generated_files]
-    )
+    file_paths = [get_path_from_file(f)
+                  for f in request.split_video_finish_message.generated_files]
 
     # Update the task with the output file paths
     for i, path in enumerate(file_paths):
@@ -168,13 +166,15 @@ def handle_manifest_finish(conn, task, request):
     if request.HasField("generate_manifest_finish_message"):
         with conn.cursor() as cur:
             # If the task is a manifest task, update the job status to complete
+            file_path = get_path_from_file(
+                request.generate_manifest_finish_message.generated_file)
             cur.execute(
                 """
                 UPDATE tasks
                 SET output_file = %s
                 WHERE id = %s
                 """,
-                (request.generate_manifest_finish_message.generated_file.fsfile.path, request.task_id)
+                (file_path, request.task_id)
             )
             cur.execute(
                 """
@@ -183,6 +183,6 @@ def handle_manifest_finish(conn, task, request):
                     manifest_file = %s
                 WHERE id = %s
                 """,
-                (request.generate_manifest_finish_message.generated_file.fsfile.path,
+                (file_path,
                  task['job_id'])
             )
