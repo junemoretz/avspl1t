@@ -6,16 +6,18 @@ from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FinishTaskMessage, Split
 
 # This is a test for the full flow of the Coordinator gRPC service.
 
+# HELPER FUNCTION
 
-def test_full_job_flow(stub):
+
+def run_full_job_flow(stub, input_path, output_path):
     """
-    Test the full job flow from submission to completion.
+    Runs the full job flow from submission to completion.
 
     :param stub: The gRPC client stub for the CoordinatorService.
+    :param input_path: The path to the input video file.
+    :param output_path: The path to the output directory.
     """
     # Create a job
-    input_path = "/path/to/input/file.mp4"
-    output_path = "/path/to/output/directory"
     input_file = file_from_path(input_path)
     output_directory = folder_from_path(output_path)
     job = AV1EncodeJob(
@@ -94,6 +96,8 @@ def test_full_job_flow(stub):
     actual_paths = sorted(actual_paths)
     manifest_output_folder = get_path_from_folder(
         manifest_task.generate_manifest_task.output_directory)
+    print("EXPECTED:", expected_paths)
+    print("ACTUAL:", actual_paths)
     assert actual_paths == expected_paths, "Manifest task should have correct file paths"
     assert manifest_task.generate_manifest_task.seconds_per_segment == 10, "Seconds per segment should match"
     assert manifest_output_folder == output_path, f"Output directory should match, got: {manifest_output_folder}"
@@ -115,3 +119,29 @@ def test_full_job_flow(stub):
     )
     assert job_status.finished, "Job should be marked as finished"
     assert job_status.percent_complete == 100, f"Job should be 100% complete"
+
+# TESTS
+
+
+def test_full_job_flow_local(stub):
+    """
+    Test the full job flow with local file paths.
+
+    :param stub: The gRPC client stub for the CoordinatorService.
+    """
+    input_path = "/path/to/input/video.mp4"
+    output_path = "/path/to/output/directory"
+
+    run_full_job_flow(stub, input_path, output_path)
+
+
+def test_full_job_flow_s3(stub):
+    """
+    Test the full job flow with S3 file paths.
+
+    :param stub: The gRPC client stub for the CoordinatorService.
+    """
+    input_path = "s3://bucket-name/input/video.mp4"
+    output_path = "s3://bucket-name/output/directory"
+
+    run_full_job_flow(stub, input_path, output_path)

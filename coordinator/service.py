@@ -5,6 +5,7 @@ from proto.avspl1t_pb2 import JobId, Job, Task, Empty
 
 from logic.job import create_job, get_job
 from logic.task import assign_next_task, build_task_proto, handle_split_finish, handle_encode_finish, handle_manifest_finish
+from logic.utils import get_path_from_file
 
 from datetime import datetime, timezone
 
@@ -198,13 +199,15 @@ class CoordinatorServicer(CoordinatorServiceServicer):
 
                 if request.HasField("encode_video_finish_message"):
                     # If the task is an encode task, update the output file path
+                    output_path = get_path_from_file(
+                        request.encode_video_finish_message.generated_file)
                     cur.execute(
                         """
                         UPDATE tasks
                         SET output_file = %s
                         WHERE id = %s
                         """,
-                        (request.encode_video_finish_message.generated_file.fsfile.path,
+                        (output_path,
                          request.task_id)
                     )
 
