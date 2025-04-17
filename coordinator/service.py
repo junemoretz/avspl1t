@@ -1,5 +1,4 @@
 # Coordinator Servicer class
-import json
 import grpc
 from proto.avspl1t_pb2_grpc import CoordinatorServiceServicer
 from proto.avspl1t_pb2 import JobId, Job, Task, Empty
@@ -8,8 +7,6 @@ from logic.job import create_job, get_job
 from logic.task import assign_next_task, build_task_proto, handle_split_finish, handle_encode_finish, handle_manifest_finish
 
 from datetime import datetime, timezone
-
-CONFIG_FILE = 'config.json'
 
 
 class CoordinatorServicer(CoordinatorServiceServicer):
