@@ -15,26 +15,30 @@ def assign_next_task(database, worker_id, heartbeat_timeout):
         Task: The Task object containing task details.
     """
     now = datetime.now(timezone.utc)
-    with database.get_db() as db:
-        # Retrieve task from the database and mark as "in progress"
-        db.execute("BEGIN IMMEDIATE")
-        # Find most recent task that meets the criteria:
-        # !completed && (!worker || heartbeat more than heartbeat_timeout ago)
-        task = db.execute(
-            "SELECT * FROM tasks WHERE completed = 0 AND (assigned_worker IS NULL OR last_heartbeat IS NULL OR last_heartbeat < ?) ORDER BY id DESC LIMIT 1",
-            (now - timedelta(seconds=heartbeat_timeout),),
-        ).fetchone()
-        # No available task meets assignment conditions; return None
-        if not task:
-            db.execute("COMMIT")
-            return None
-         # Else, mark the task as assigned to the worker
-        db.execute(
-            "UPDATE tasks SET assigned_worker = ?, last_heartbeat = ? WHERE id = ?",
-            (worker_id, now, task['id']),
-        )
-        db.execute("COMMIT")
-        return task
+    with database.get_db() as conn:
+        with conn.cursor() as cur:
+            # Find most recent task that meets the criteria:
+            # !completed && (!worker || heartbeat more than heartbeat_timeout ago)
+            cur.execute(
+                """
+                SELECT * FROM tasks 
+                WHERE completed = FALSE AND (assigned_worker IS NULL OR last_heartbeat IS NULL OR last_heartbeat < %s) 
+                ORDER BY id DESC LIMIT 1""",
+                (now - timedelta(seconds=heartbeat_timeout),),
+            )
+            task = cur.fetchone()
+
+            # No available task meets assignment conditions; return None
+            if not task:
+                conn.commit()
+                return None
+            # Else, mark the task as assigned to the worker
+            cur.execute(
+                "UPDATE tasks SET assigned_worker = %s, last_heartbeat = %s WHERE id = %s",
+                (worker_id, now, task['id']),
+            )
+            conn.commit()
+            return task
 
 
 def build_task_proto(database, task, job):
@@ -70,12 +74,15 @@ def build_task_proto(database, task, job):
             )
         )
     elif task['type'] == 'manifest':
-        with database.get_db() as db:
-            manifest_files = db.execute(
-                """
-                SELECT * FROM tasks WHERE job_id = ? AND type = 'encode' AND completed = 1 ORDER BY task_index ASC
-                """,
-                (task['job_id'],)).fetchall()
+        with database.get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM tasks WHERE job_id = %s AND type = 'encode' AND completed = TRUE ORDER BY task_index ASC
+                    """,
+                    (task['job_id'],))
+                manifest_files = cur.fetchall()
+
             task_obj = Task(
                 generate_manifest_task=GenerateManifestTask(
                     files=[
@@ -99,11 +106,11 @@ def build_task_proto(database, task, job):
     return task_obj
 
 
-def handle_split_finish(db, task, request):
+def handle_split_finish(conn, task, request):
     """
     Handle the completion of a split task.
     Args:
-        db (sqlite3.Connection): The database connection.
+        conn (postgres.Connection): The database connection.
         task (dict): The task details.
         request (Task): The Task object containing task details.
     """
@@ -114,63 +121,68 @@ def handle_split_finish(db, task, request):
 
     # Update the task with the output file paths
     for i, path in enumerate(file_paths):
-        db.execute(
-            """
-            INSERT INTO tasks (job_id, type, input_file, output_dir, crf, task_index)
-            VALUES (?, 'encode', ?, ?, ?, ?)
-            """,
-            (task['job_id'], path, task['output_dir'], task['crf'], i)
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO tasks (job_id, type, input_file, output_dir, crf, task_index)
+                VALUES (%s, 'encode', %s, %s, %s, %s)
+                """,
+                (task['job_id'], path, task['output_dir'], task['crf'], i)
+            )
 
 
-def handle_encode_finish(db, task):
+def handle_encode_finish(conn, task):
     """
     Handle the completion of an encode task.
     Args:
-        db (sqlite3.Connection): The database connection.
+        conn (postgres.Connection): The database connection.
         task (dict): The task details.
     """
     # If the task is an encode task, check if all encode tasks are completed
     # and if so, create a manifest task
-    remaining = db.execute(
-        """
-        SELECT COUNT(*) FROM tasks WHERE job_id = ? AND completed = 0
-        """,
-        (task['job_id'],)).fetchone()[0]
-    if remaining == 0:
-        db.execute(
+    with conn.cursor() as cur:
+        cur.execute(
             """
-            INSERT INTO tasks (job_id, type, output_dir) VALUES (?, 'manifest', ?)
+            SELECT COUNT(*) FROM tasks WHERE job_id = %s AND completed = FALSE
             """,
-            (task['job_id'], task['output_dir'])
-        )
+            (task['job_id'],))
+        remaining = cur.fetchone()[0]
+
+        if remaining == 0:
+            cur.execute(
+                """
+                INSERT INTO tasks (job_id, type, output_dir) VALUES (%s, 'manifest', %s)
+                """,
+                (task['job_id'], task['output_dir'])
+            )
 
 
-def handle_manifest_finish(db, task, request):
+def handle_manifest_finish(conn, task, request):
     """
     Handle the completion of a manifest task.
     Args:
-        db (sqlite3.Connection): The database connection.
+        conn (postgres.Connection): The database connection.
         task (dict): The task details.
         request (Task): The Task object containing task details.
     """
     if request.HasField("generate_manifest_finish_message"):
-        # If the task is a manifest task, update the job status to complete
-        db.execute(
-            """
-            UPDATE tasks
-            SET output_file = ?
-            WHERE id = ?
-            """,
-            (request.generate_manifest_finish_message.generated_file.fsfile.path, request.task_id)
-        )
-        db.execute(
-            """
-            UPDATE jobs
-            SET status = 'complete',
-                manifest_file = ?
-            WHERE id = ?
-            """,
-            (request.generate_manifest_finish_message.generated_file.fsfile.path,
-             task['job_id'])
-        )
+        with conn.cursor() as cur:
+            # If the task is a manifest task, update the job status to complete
+            cur.execute(
+                """
+                UPDATE tasks
+                SET output_file = %s
+                WHERE id = %s
+                """,
+                (request.generate_manifest_finish_message.generated_file.fsfile.path, request.task_id)
+            )
+            cur.execute(
+                """
+                UPDATE jobs
+                SET status = 'complete',
+                    manifest_file = %s
+                WHERE id = %s
+                """,
+                (request.generate_manifest_finish_message.generated_file.fsfile.path,
+                 task['job_id'])
+            )

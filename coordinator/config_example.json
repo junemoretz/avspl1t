@@ -1,5 +1,9 @@
 {
-  "databaseFile": "example.db",
+  "databaseFile": "avspl1t",
+  "postgresUser": "user",
+  "postgresPassword": "password",
+  "postgresHost": "localhost",
+  "postgresPort": 5432,
   "heartbeatTimeout": 15,
   "maxWorkers": 10,
   "host": "localhost",

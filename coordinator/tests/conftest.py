@@ -44,3 +44,14 @@ def stub(grpc_server):
     stub = CoordinatorServiceStub(channel)
     yield stub
     channel.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_database():
+    """
+    Reset the database before each test.
+    """
+    db = DBLogic(config_file=CONFIG_FILE, schema_file=SCHEMA_FILE)
+    with db.get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE tasks, jobs RESTART IDENTITY CASCADE;")

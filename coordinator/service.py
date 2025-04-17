@@ -81,29 +81,30 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during task retrieval.
         """
-        with self.database.get_db() as db:
-            task_row = assign_next_task(self.database,
-                                        request.worker_id, self.HEARTBEAT_TIMEOUT)
-            if task_row is None:
-                #  If no task found, return an empty Task object
-                return Task()
+        task_row = assign_next_task(self.database,
+                                    request.worker_id, self.HEARTBEAT_TIMEOUT)
+        if task_row is None:
+            #  If no task found, return an empty Task object
+            return Task()
 
-            with self.database.get_db() as db:
+        with self.database.get_db() as conn:
+            with conn.cursor() as cur:
                 # Find associated job
-                job_row = db.execute(
+                cur.execute(
                     """
-                    SELECT * FROM jobs WHERE id = ?
+                    SELECT * FROM jobs WHERE id = %s
                     """,
-                    (task_row['job_id'],)).fetchone()
+                    (task_row['job_id'],))
+                job_row = cur.fetchone()
 
-            # Construct the task object based on the task type
-            task_proto = build_task_proto(self.database, task_row, job_row)
-            if task_proto is None:
-                # If task_proto is None, set the error code and return an empty Task object
-                context.set_code(grpc.StatusCode.INTERNAL)
-                context.set_details("Unknown task type")
-                return Task()
-            return task_proto
+        # Construct the task object based on the task type
+        task_proto = build_task_proto(self.database, task_row, job_row)
+        if task_proto is None:
+            # If task_proto is None, set the error code and return an empty Task object
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("Unknown task type")
+            return Task()
+        return task_proto
 
     def Heartbeat(self, request, context):
         """
@@ -116,27 +117,31 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during heartbeat update.
         """
-        with self.database.get_db() as db:
-            task = db.execute(
-                """
-                SELECT * FROM tasks WHERE id = ?
-                """,
-                (request.task_id,)).fetchone()
-            if not task:
-                # If no task is found, set the error code and return an empty object
-                context.set_code(grpc.StatusCode.NOT_FOUND)
-                context.set_details("Task not found")
-                return Empty()
-            if task and task['assigned_worker'] == request.worker_id:
-                # Update the last heartbeat time for the task
-                db.execute(
+        with self.database.get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
                     """
-                    UPDATE tasks
-                    SET last_heartbeat = ?
-                    WHERE id = ?
+                    SELECT * FROM tasks WHERE id = %s
                     """,
-                    (datetime.now(timezone.utc), request.task_id)
-                )
+                    (request.task_id,))
+                task = cur.fetchone()
+
+                if not task:
+                    # If no task is found, set the error code and return an empty object
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    context.set_details("Task not found")
+                    return Empty()
+
+                if task and task['assigned_worker'] == request.worker_id:
+                    # Update the last heartbeat time for the task
+                    cur.execute(
+                        """
+                        UPDATE tasks
+                        SET last_heartbeat = %s
+                        WHERE id = %s
+                        """,
+                        (datetime.now(timezone.utc), request.task_id)
+                    )
             return Empty()
 
     def FinishTask(self, request, context):
@@ -150,63 +155,67 @@ class CoordinatorServicer(CoordinatorServiceServicer):
         Raises:
             grpc.StatusCode: If there is an error during task completion.
         """
-        with self.database.get_db() as db:
-            task = db.execute(
-                """
-                SELECT * FROM tasks WHERE id = ?
-                """,
-                (request.task_id,)).fetchone()
-            if not task:
-                # If no task is found, set the error code and return an empty object
-                context.set_code(grpc.StatusCode.NOT_FOUND)
-                return Empty()
-            if not request.succeeded:
-                # If the task failed, mark job as failed, and all associated tasks as completed/canceled
-                db.execute(
+        with self.database.get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
                     """
-                    UPDATE jobs
-                    SET status = 'failed'
-                    WHERE id = ?
+                    SELECT * FROM tasks WHERE id = %s
                     """,
-                    (request.task_id, )
-                )
-                db.execute(
+                    (request.task_id,))
+                task = cur.fetchone()
+
+                if not task:
+                    # If no task is found, set the error code and return an empty object
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    return Empty()
+
+                if not request.succeeded:
+                    # If the task failed, mark job as failed, and all associated tasks as completed/canceled
+                    cur.execute(
+                        """
+                        UPDATE jobs
+                        SET status = 'failed'
+                        WHERE id = %s
+                        """,
+                        (request.task_id, )
+                    )
+                    cur.execute(
+                        """
+                        UPDATE tasks
+                        SET completed = TRUE
+                        WHERE job_id = %s
+                        """,
+                        (request.task_id,)
+                    )
+                    return Empty()
+
+                # If succeeded, mark task as completed
+                cur.execute(
                     """
                     UPDATE tasks
-                    SET completed = 1
-                    WHERE job_id = ?
+                    SET completed = TRUE
+                    WHERE id = %s
                     """,
                     (request.task_id,)
                 )
-                return Empty()
 
-            # If succeeded, mark task as completed
-            db.execute(
-                """
-                UPDATE tasks
-                SET completed = 1
-                WHERE id = ?
-                """,
-                (request.task_id,)
-            )
-
-            if request.HasField("encode_video_finish_message"):
-                # If the task is an encode task, update the output file path
-                db.execute(
-                    """
-                    UPDATE tasks
-                    SET output_file = ?
-                    WHERE id = ?
-                    """,
-                    (request.encode_video_finish_message.generated_file.fsfile.path,
-                     request.task_id)
-                )
+                if request.HasField("encode_video_finish_message"):
+                    # If the task is an encode task, update the output file path
+                    cur.execute(
+                        """
+                        UPDATE tasks
+                        SET output_file = %s
+                        WHERE id = %s
+                        """,
+                        (request.encode_video_finish_message.generated_file.fsfile.path,
+                         request.task_id)
+                    )
 
             # Additional steps should take place depending on task type
             if task['type'] == 'split':
-                handle_split_finish(db, task, request)
+                handle_split_finish(conn, task, request)
             elif task['type'] == 'encode':
-                handle_encode_finish(db, task)
+                handle_encode_finish(conn, task)
             elif task['type'] == 'manifest':
-                handle_manifest_finish(db, task, request)
+                handle_manifest_finish(conn, task, request)
             return Empty()
