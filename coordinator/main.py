@@ -25,6 +25,8 @@ def serve(db, config_file=CONFIG_FILE, manual_heartbeat=-1):
         max_workers = config['maxWorkers']
         heartbeat_timeout = config['heartbeatTimeout'] if manual_heartbeat == - \
             1 else manual_heartbeat
+    # Note: max_workers sets the number of threads used to handle incoming gRPC requests.
+    # It does NOT limit the number of worker clients that can connect or run.
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     add_CoordinatorServiceServicer_to_server(
         CoordinatorServicer(db, heartbeat_timeout), server

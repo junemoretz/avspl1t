@@ -2,11 +2,16 @@
 
 This folder contains the coordinator server implementation for the avspl1t system. The coordinator server is a Python application that tracks jobs/tasks across the entire system, and is the central point of control for the system.
 
+## Key files
+
+(in progress...)
+
 ## Setup
 
 1. Duplicate [config_example.json](config_example.json) and rename to `config.json`.
 
    - Fill in your configuration details.
+   - Note that the `maxWorkers` field controls how many threads the coordinator can use to process incoming gRPC requests at the same time. It **does not** limit the number of worker processes or clients that can connect.
 
 2. Install the python dependencies for the server (this requires `poetry` to be installed):
 
@@ -24,8 +29,6 @@ Note that Poetry dependencies are shared between all components of the avspl1t s
 poetry run python main.py
 ```
 
-(in progress)
-
 ## Testing
 
 1. Clear your `.db` file (e.g., "test.db") before running the automated tests.
@@ -41,5 +44,3 @@ cd tests
 ```
 poetry run pytest
 ```
-
-(in progress)
