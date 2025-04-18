@@ -47,12 +47,12 @@ class DBLogic:
             if self.db_type == 'sqlite':
                 # SQLite specific settings
                 self.db_file += '.db'
-
-            # PostgreSQL specific settings
-            self.postgres_user = config['postgresUser']
-            self.postgres_password = config['postgresPassword']
-            self.postgres_host = config['postgresHost']
-            self.postgres_port = config['postgresPort']
+            else:
+                # PostgreSQL specific settings
+                self.postgres_user = config['postgresUser']
+                self.postgres_password = config['postgresPassword']
+                self.postgres_host = config['postgresHost']
+                self.postgres_port = config['postgresPort']
 
         self.init_db()  # Initialize the database when the class is instantiated
 
