@@ -22,7 +22,7 @@ Some notes on a few specific parts of the data model that might not be self-expl
 
 ### Jobs
 
-The only job supported right now is AV1 encoding. For simplicity, we only have one option, the constant quality (CRF) factor. The resolution will be the same as the input resolution. More encode options could be added here in the future - as a proof of concept system, we have avoided adding unnecessary complexity and focused on demonstrating the baseline functionality.
+The only job supported right now is H.265 encoding. For simplicity, we only have one option, the constant quality (CRF) factor. The resolution will be the same as the input resolution. More encode options could be added here in the future - as a proof of concept system, we have avoided adding unnecessary complexity and focused on demonstrating the baseline functionality.
 
 ### Tasks
 

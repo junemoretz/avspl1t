@@ -16,7 +16,7 @@ The worker should split the video file into equal length pieces, with the length
 
 ## Encoding a Segment
 
-Segments should be encoded into AV1 HLS segments using FFmpeg and placed into the output directory, and the generated file should be returned.
+Segments should be encoded into H.265 MPEG-2 TS HLS segments using FFmpeg and placed into the output directory, and the generated file should be returned.
 
 ## Generating a HLS Manifest
 

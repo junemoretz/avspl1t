@@ -1,6 +1,6 @@
 # avspl1t
 
-avspl1t is an experimental distributed video encoding system for AV1/HLS, built as a final project for Harvard CS2620 (Introduction to Distributed Computing).
+avspl1t is an experimental distributed video encoding system for H.265/HLS, built as a final project for Harvard CS2620 (Introduction to Distributed Computing).
 
 ## System Setup, Usage, and Testing
 
