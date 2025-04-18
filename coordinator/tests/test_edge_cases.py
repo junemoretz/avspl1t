@@ -2,7 +2,7 @@ import sys
 import time
 
 sys.path.append('../')  # Adjust the path to import the main module
-from logic.utils import file_from_path, folder_from_path
+from logic.utils import file_from_path, folder_from_path, get_path_from_file
 from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FinishTaskMessage, SplitVideoFinishMessage, JobId, GetTaskMessage
 
 # This is a test for edge cases for the Coordinator gRPC service.
@@ -153,4 +153,5 @@ def test_heartbeat_and_reassignment(stub):
     # Worker B should be able to claim the task
     reassigned = stub.GetTask(GetTaskMessage(worker_id="worker_B"))
     assert reassigned.id == task_id, "Task should be reassigned to worker_B"
-    assert reassigned.split_video_task.input_file.fsfile.path == input_path, "Input file path should match"
+    assert get_path_from_file(
+        reassigned.split_video_task.input_file) == input_path, "Input file path should match"

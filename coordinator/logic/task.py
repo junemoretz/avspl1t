@@ -1,7 +1,7 @@
 # Handle Task-level Logic for Coordinator
 from datetime import datetime, timezone, timedelta
-from logic.utils import timestamp_from_sql, get_path_from_file, file_from_path, folder_from_path
-from proto.avspl1t_pb2 import Task, SplitVideoTask, EncodeVideoTask, GenerateManifestTask
+from logic.utils import timestamp_from_sql, get_path_from_file
+from proto.avspl1t_pb2 import Task, SplitVideoTask, EncodeVideoTask, GenerateManifestTask, File, Folder
 
 
 def assign_next_task(database, ph, worker_id, heartbeat_timeout):
@@ -54,11 +54,14 @@ def build_task_proto(database, ph, task, job):
     """
     now = datetime.now(timezone.utc)
 
-    input_file = None
-    if task['type'] == 'split' or task['type'] == 'encode':
+    input_file = File()
+    if task['input_file_proto']:
         # only split and encode tasks have input files
-        input_file = file_from_path(task['input_file'])
-    output_directory = folder_from_path(task['output_dir'])
+        input_file.ParseFromString(task['input_file_proto'])
+
+    output_directory = Folder()
+    if task['output_dir_proto']:
+        output_directory.ParseFromString(task['output_dir_proto'])
 
     # construct correct task object based on type
     if task['type'] == 'split':
@@ -91,8 +94,8 @@ def build_task_proto(database, ph, task, job):
             task_obj = Task(
                 generate_manifest_task=GenerateManifestTask(
                     files=[
-                        file_from_path(et['output_file'])
-                        for et in manifest_files if et['output_file']
+                        File().FromString(et['output_file_proto'])
+                        for et in manifest_files if et['output_file_proto']
                     ],
                     output_directory=output_directory,
                     seconds_per_segment=job['seconds_per_segment'],
@@ -116,19 +119,19 @@ def handle_split_finish(conn, ph, task, request):
         task (dict): The task details.
         request (Task): The Task object containing task details.
     """
-    # Extract and sort file paths first
-    file_paths = [get_path_from_file(f)
-                  for f in request.split_video_finish_message.generated_files]
-
     # Update the task with the output file paths
-    for i, path in enumerate(file_paths):
+    for i, file_msg in enumerate(request.split_video_finish_message.generated_files):
+        path = get_path_from_file(file_msg)
+        serialized = file_msg.SerializeToString()
+
         cur = conn.cursor()
         cur.execute(
             f"""
-            INSERT INTO tasks (job_id, type, input_file, output_dir, crf, task_index)
-            VALUES ({ph}, 'encode', {ph}, {ph}, {ph}, {ph})
+            INSERT INTO tasks (job_id, type, input_file, input_file_proto, output_dir, output_dir_proto, crf, task_index)
+            VALUES ({ph}, 'encode', {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
             """,
-            (task['job_id'], path, task['output_dir'], task['crf'], i)
+            (task['job_id'], path, serialized, task['output_dir_proto'],
+             task['output_dir_proto'], task['crf'], i),
         )
 
 
@@ -152,9 +155,10 @@ def handle_encode_finish(conn, ph, task):
     if remaining == 0:
         cur.execute(
             f"""
-            INSERT INTO tasks (job_id, type, output_dir) VALUES ({ph}, 'manifest', {ph})
+            INSERT INTO tasks (job_id, type, output_dir, output_dir_proto) 
+            VALUES ({ph}, 'manifest', {ph}, {ph})
             """,
-            (task['job_id'], task['output_dir'])
+            (task['job_id'], task['output_dir'], task['output_dir_proto'])
         )
 
 
@@ -170,23 +174,26 @@ def handle_manifest_finish(conn, ph, task, request):
     if request.HasField("generate_manifest_finish_message"):
         cur = conn.cursor()
         # If the task is a manifest task, update the job status to complete
-        file_path = get_path_from_file(
-            request.generate_manifest_finish_message.generated_file)
+        finish_msg_file = request.generate_manifest_finish_message.generated_file
+        file_path = get_path_from_file(finish_msg_file)
+        file_proto = finish_msg_file.SerializeToString()
+
         cur.execute(
             f"""
             UPDATE tasks
-            SET output_file = {ph}
+            SET output_file = {ph}, output_file_proto = {ph}
             WHERE id = {ph}
             """,
-            (file_path, request.task_id)
+            (file_path, file_proto, request.task_id)
         )
         cur.execute(
             f"""
             UPDATE jobs
             SET status = 'complete',
-                manifest_file = {ph}
+                manifest_file = {ph}, manifest_file_proto = {ph}
             WHERE id = {ph}
             """,
             (file_path,
+             file_proto,
              task['job_id'])
         )

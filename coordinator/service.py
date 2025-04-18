@@ -205,19 +205,20 @@ class CoordinatorServicer(CoordinatorServiceServicer):
 
             if request.HasField("encode_video_finish_message"):
                 # If the task is an encode task, update the output file path
-                output_path = get_path_from_file(
-                    request.encode_video_finish_message.generated_file)
+                output_file = request.encode_video_finish_message.generated_file
+                output_path = get_path_from_file(output_file)
+                output_proto = output_file.SerializeToString()
                 cur.execute(
                     f"""
                     UPDATE tasks
-                    SET output_file = {self.ph}
+                    SET output_file = {self.ph}, output_file_proto = {self.ph}
                     WHERE id = {self.ph}
                     """,
-                    (output_path,
-                        request.task_id)
+                    (output_path, output_proto, request.task_id)
                 )
 
             # Additional steps should take place depending on task type
+            print(f"Finishing {task['type']} task {request.task_id}")
             if task['type'] == 'split':
                 handle_split_finish(conn, self.ph, task, request)
             elif task['type'] == 'encode':

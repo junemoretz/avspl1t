@@ -1,6 +1,6 @@
 # Handle Job-level Logic for Coordinator
-from logic.utils import get_path_from_file, get_path_from_folder, file_from_path, folder_from_path, timestamp_from_sql
-from proto.avspl1t_pb2 import Job, JobDetails, AV1EncodeJob
+from logic.utils import get_path_from_file, get_path_from_folder, timestamp_from_sql
+from proto.avspl1t_pb2 import Job, JobDetails, AV1EncodeJob, File, Folder
 
 
 def create_job(database, ph, job):
@@ -16,7 +16,11 @@ def create_job(database, ph, job):
         str: The ID of the created job.
     """
     input_path = get_path_from_file(job.input_file)
+    input_file_proto = job.input_file.SerializeToString()
+
     output_path = get_path_from_folder(job.output_directory)
+    output_dir_proto = job.output_directory.SerializeToString()
+
     crf = job.crf
     seconds_per_segment = job.seconds_per_segment
 
@@ -26,11 +30,12 @@ def create_job(database, ph, job):
         if database.db_type == "postgres":
             cur.execute(
                 f"""
-                INSERT INTO jobs (input_file, output_dir, crf, seconds_per_segment) 
-                VALUES ({ph}, {ph}, {ph}, {ph})
+                INSERT INTO jobs (input_file, input_file_proto, output_dir, output_dir_proto, crf, seconds_per_segment) 
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                 RETURNING id
                 """,
-                (input_path, output_path, crf, seconds_per_segment),
+                (input_path, input_file_proto, output_path,
+                 output_dir_proto, crf, seconds_per_segment),
             )
 
             # get the job ID of the newly created job
@@ -38,10 +43,11 @@ def create_job(database, ph, job):
         else:  # SQLite
             cur.execute(
                 f"""
-                INSERT INTO jobs (input_file, output_dir, crf, seconds_per_segment) 
-                VALUES ({ph}, {ph}, {ph}, {ph})
+                INSERT INTO jobs (input_file, input_file_proto, output_dir, output_dir_proto, crf, seconds_per_segment) 
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                 """,
-                (input_path, output_path, crf, seconds_per_segment),
+                (input_path, input_file_proto, output_path,
+                 output_dir_proto, crf, seconds_per_segment),
             )
 
             # get the job ID of the newly created job
@@ -50,8 +56,12 @@ def create_job(database, ph, job):
 
         # create the split task
         cur.execute(
-            f"INSERT INTO tasks (job_id, type, input_file, output_dir, crf) VALUES ({ph}, 'split', {ph}, {ph}, {ph})",
-            (job_id, input_path, output_path, crf),
+            f"""
+            INSERT INTO tasks (job_id, type, input_file, input_file_proto, output_dir, output_dir_proto, crf) 
+            VALUES ({ph}, 'split', {ph}, {ph}, {ph}, {ph}, {ph})
+            """,
+            (job_id, input_path, input_file_proto,
+             output_path, output_dir_proto, crf),
         )
 
     return str(job_id)
@@ -93,12 +103,22 @@ def get_job(database, ph, job_id):
 
         percent_complete = int((completed / total) * 100) if total > 0 else 0
 
+        input_file = File()
+        input_file.ParseFromString(job['input_file_proto'])
+
+        output_dir = Folder()
+        output_dir.ParseFromString(job['output_dir_proto'])
+
+        manifest_file = File()
+        if job['manifest_file_proto']:
+            manifest_file.ParseFromString(job['manifest_file_proto'])
+
         # create a Job object
         job_details = JobDetails(
             av1_encode_job=AV1EncodeJob(
-                input_file=file_from_path(job['input_file']),
-                output_directory=folder_from_path(job['output_dir']),
-                working_directory=folder_from_path(job['output_dir']),
+                input_file=input_file,
+                output_directory=output_dir,
+                working_directory=output_dir,
                 crf=job['crf'],
                 seconds_per_segment=job['seconds_per_segment'],
             )
@@ -109,7 +129,7 @@ def get_job(database, ph, job_id):
             finished=(job['status'] == 'complete'),
             failed=(job['status'] == 'failed'),
             percent_complete=percent_complete,
-            generated_manifest=file_from_path(job['manifest_file'] or ""),
+            generated_manifest=manifest_file,
             job_details=job_details,
             created_at=timestamp_from_sql(job['created_at']),
         )

@@ -9,17 +9,18 @@ from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FinishTaskMessage, Split
 # HELPER FUNCTION
 
 
-def run_full_job_flow(stub, input_path, output_path):
+def run_full_job_flow(stub, input_path, output_path, use_credentials=False):
     """
     Runs the full job flow from submission to completion.
 
     :param stub: The gRPC client stub for the CoordinatorService.
     :param input_path: The path to the input video file.
     :param output_path: The path to the output directory.
+    :param use_credentials: Whether to use credentials for S3 paths.
     """
     # Create a job
-    input_file = file_from_path(input_path)
-    output_directory = folder_from_path(output_path)
+    input_file = file_from_path(input_path, testing=use_credentials)
+    output_directory = folder_from_path(output_path, testing=use_credentials)
     job = AV1EncodeJob(
         input_file=input_file,
         output_directory=output_directory,
@@ -54,7 +55,7 @@ def run_full_job_flow(stub, input_path, output_path):
             succeeded=True,
             split_video_finish_message=SplitVideoFinishMessage(
                 generated_files=[
-                    file_from_path(f"{output_path}/segment_{i}.mp4") for i in range(3)]
+                    file_from_path(f"{output_path}/segment_{i}.mp4", testing=use_credentials) for i in range(3)]
             )
         )
     )
@@ -78,7 +79,7 @@ def run_full_job_flow(stub, input_path, output_path):
                 succeeded=True,
                 encode_video_finish_message=EncodeVideoFinishMessage(
                     generated_file=file_from_path(
-                        f"{output_path}/segment_{i}.av1")
+                        f"{output_path}/segment_{i}.av1", testing=use_credentials)
                 )
             )
         )
@@ -90,7 +91,9 @@ def run_full_job_flow(stub, input_path, output_path):
         )
     )
     assert manifest_task is not None, "Manifest task should not be None"
-    expected_paths = [f"{output_path}/segment_{i}.av1" for i in range(3)]
+    expected_files = [file_from_path(
+        f"{output_path}/segment_{i}.av1", testing=use_credentials) for i in range(3)]
+    expected_paths = [get_path_from_file(f) for f in expected_files]
     actual_paths = [
         get_path_from_file(f) for f in manifest_task.generate_manifest_task.files]
     actual_paths = sorted(actual_paths)
@@ -108,7 +111,8 @@ def run_full_job_flow(stub, input_path, output_path):
             task_id=manifest_task.id,
             succeeded=True,
             generate_manifest_finish_message=GenerateManifestFinishMessage(
-                generated_file=file_from_path(f"{output_path}/master.m3u8")
+                generated_file=file_from_path(
+                    f"{output_path}/master.m3u8", testing=use_credentials)
             )
         )
     )
@@ -144,4 +148,4 @@ def test_full_job_flow_s3(stub):
     input_path = "s3://bucket-name/input/video.mp4"
     output_path = "s3://bucket-name/output/directory"
 
-    run_full_job_flow(stub, input_path, output_path)
+    run_full_job_flow(stub, input_path, output_path, use_credentials=True)

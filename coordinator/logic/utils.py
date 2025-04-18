@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from google.protobuf.timestamp_pb2 import Timestamp
-from proto.avspl1t_pb2 import File, Folder, S3File, FSFile, S3Folder, FSFolder
+from proto.avspl1t_pb2 import File, Folder, S3File, FSFile, S3Folder, FSFolder, S3Credentials
 
 # Helper functions
 
@@ -65,11 +65,12 @@ def get_path_from_folder(folder_msg):
             "Unsupported folder type. Must be either fsfolder or s3folder.")
 
 
-def file_from_path(path: str):
+def file_from_path(path: str, testing: bool = False):
     """
     Create a File message from a path.
     Args:
         path (str): The path of the file.
+        testing (bool): Whether to add fake credentials for testing purposes.
     Returns:
         File: The File message.
     """
@@ -77,16 +78,26 @@ def file_from_path(path: str):
         # Parse: s3://bucket-name/key/path
         no_prefix = path[len("s3://"):]
         bucket, _, key = no_prefix.partition("/")
-        return File(s3file=S3File(bucket=bucket, path=key))
+        file = File(s3file=S3File(bucket=bucket, path=key))
+        if testing:
+            # Add fake credentials for testing purposes
+            file.s3file.credentials.CopyFrom(S3Credentials(
+                access_key_id="FAKEACCESSKEY",
+                secret_access_key="FAKESECRETKEY",
+                region="us-west-1",
+                endpoint="https://s3.test.fake"
+            ))
+        return file
     else:  # local file
         return File(fsfile=FSFile(path=path))
 
 
-def folder_from_path(path: str):
+def folder_from_path(path: str, testing: bool = False):
     """
     Create a Folder message from a path.
     Args:
         path (str): The path of the folder.
+        testing (bool): Whether to add fake credentials for testing purposes.
     Returns:
         Folder: The Folder message.
     """
@@ -94,6 +105,15 @@ def folder_from_path(path: str):
         # Parse: s3://bucket-name/key/path
         no_prefix = path[len("s3://"):]
         bucket, _, key = no_prefix.partition("/")
-        return Folder(s3folder=S3Folder(bucket=bucket, path=key))
+        folder = Folder(s3folder=S3Folder(bucket=bucket, path=key))
+        if testing:
+            # Add fake credentials for testing purposes
+            folder.s3folder.credentials.CopyFrom(S3Credentials(
+                access_key_id="FAKEACCESSKEY",
+                secret_access_key="FAKESECRETKEY",
+                region="us-west-1",
+                endpoint="https://s3.test.fake"
+            ))
+        return folder
     else:  # local folder
         return Folder(fsfolder=FSFolder(path=path))
