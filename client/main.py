@@ -2,8 +2,9 @@ import click
 import json
 import grpc
 import os
+import boto3
 from pathlib import Path
-from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, JobId, Job
+from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, JobId, Job, S3Credentials, S3File, S3Folder
 from proto.avspl1t_pb2_grpc import CoordinatorServiceStub
 
 TEST_PORT=51515
@@ -22,10 +23,44 @@ with open('config.json', 'r') as f:
     stub = CoordinatorServiceStub(channel)
 
 def validateS3():
-    # todo!
-    # remove trailing slash if needed
-    # ensure format is bucket:path
+    if not 'access_key_id' in config['s3']:
+        click.echo("You must specify an access key ID to use S3!")
+        exit(1)
+    if not 'secret_access_key' in config['s3']:
+        click.echo("You must specify a secret access key to use S3!")
+        exit(1)
+    if not 'region' in config['s3']:
+        click.echo("You must specify a region to use S3!")
+        exit(1)
+    if not 'endpoint' in config['s3']:
+        click.echo("You must specify an endpoint to use S3!")
+        exit(1)
     return True
+
+def getS3Credentials():
+    return S3Credentials(access_key_id=config['s3']['access_key_id'], secret_access_key=config['s3']['secret_access_key'], region=config['s3']['region'], endpoint=config['s3']['endpoint'])
+
+def validateDir(dir):
+    dir = dir.strip("/")
+    if not ':' in dir:
+        click.echo("S3 directories must be in bucket:path format!")
+        exit(1)
+    return dir
+
+def s3Upload(path, bucket, destPath):
+    # Initialize
+    client = boto3.client(
+        's3',
+        aws_access_key_id=getS3Credentials().access_key_id,
+        aws_secret_access_key=getS3Credentials().secret_access_key,
+        endpoint_url=getS3Credentials().endpoint,
+        region_name=getS3Credentials().region
+    )
+    with path.open("rb") as file:
+        with click.progressbar(length=os.stat(path).st_size, label='Uploading input file to S3') as bar:
+            def callback(size):
+                bar.update(bar._completed_intervals + size)
+            client.upload_fileobj(file, bucket, destPath, Callback=callback)
 
 @click.group()
 def client():
@@ -54,19 +89,35 @@ def create(input, uploadtos3, workingdir, workingdirs3, outputdir, outputdirs3, 
     if (not outputdir and not outputdirs3):
         click.echo("You must specify an output directory.")
         exit(1)
+    if workingdirs3:
+        workingdirs3 = validateDir(workingdirs3)
+    if outputdirs3:
+        outputdirs3 = validateDir(outputdirs3)
     # Create directories if needed
-    workingdir.mkdir(parents=True, exist_ok=True)
-    outputdir.mkdir(parents=True, exist_ok=True)
+    if workingdir:
+        workingdir.mkdir(parents=True, exist_ok=True)
+    if outputdir:
+        outputdir.mkdir(parents=True, exist_ok=True)
     # Construct Protobuf request
     input_protofile = None
     working = None
     output = None
-    if not uploadtos3:
+    if uploadtos3:
+        bucket = workingdirs3.split(':')[0]
+        path = workingdirs3.split(':')[1]
+        uploadPath = path + "/input" + input.suffix
+        s3Upload(input, bucket, uploadPath)
+        input_protofile = File(s3file=S3File(bucket=bucket, path=uploadPath, credentials=getS3Credentials()))
+    else:
         input_protofile = File(fsfile=FSFile(path=str(input.absolute())))
     if workingdir:
         working = Folder(fsfolder=FSFolder(path=str(workingdir.absolute())))
+    else:
+        working = Folder(s3folder=S3Folder(bucket=workingdirs3.split(':')[0], path=workingdirs3.split(':')[1], credentials=getS3Credentials()))
     if outputdir:
         output = Folder(fsfolder=FSFolder(path=str(outputdir.absolute())))
+    else:
+        output = Folder(s3folder=S3Folder(bucket=outputdirs3.split(':')[0], path=outputdirs3.split(':')[1], credentials=getS3Credentials()))
     job = AV1EncodeJob(
         input_file=input_protofile,
         output_directory=output,
