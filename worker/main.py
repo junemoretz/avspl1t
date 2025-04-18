@@ -3,6 +3,10 @@ import grpc
 import time
 import os
 import threading
+import traceback
+from logic.splitVideo import split_video
+from logic.encodeVideo import encode_video
+from logic.generateManifest import generate_manifest
 from proto.avspl1t_pb2_grpc import CoordinatorServiceStub
 from proto.avspl1t_pb2 import GetTaskMessage, HeartbeatMessage, FinishTaskMessage
 
@@ -55,21 +59,23 @@ def handleTask(task):
     response = None
     # switch on type
     try:
-        if task.split_video_task:
-            finish_message = None
-            response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=true,split_video_finish_message=finish_message)
-        if task.encode_video_task:
-            finish_message = None
-            response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=true,encode_video_finish_message=finish_message)
-        if task.generate_manifest_task:
-            finish_message = None
-            response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=true,generate_manifest_finish_message=finish_message)
-    except exc:
+        if task.WhichOneof("task") == "split_video_task":
+            finish_message = split_video(task)
+            response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=True,split_video_finish_message=finish_message)
+        elif task.WhichOneof("task") == "encode_video_task":
+            finish_message = encode_video(task)
+            response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=True,encode_video_finish_message=finish_message)
+        elif task.WhichOneof("task") == "generate_manifest_task":
+            finish_message = generate_manifest(task)
+            response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=True,generate_manifest_finish_message=finish_message)
+    except Exception as exc:
         print(exc)
-        response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=false)
+        print(traceback.format_exc())
+        response = FinishTaskMessage(worker_id=worker_id,task_id=task.id,succeeded=False)
     # end heartbeat
     stop_event.set()
     heartbeat_thread.join()
+    print("Task completed!")
     return response
 
 def sendResponse(response):
@@ -78,8 +84,8 @@ def sendResponse(response):
 if __name__ == '__main__':
     while True:
         task = getTask()
-        print(f'Got task with ID {task.id}')
-        if task:
+        if task.id:
+            print(f'Got task with ID {task.id}')
             response = handleTask(task)
             sendResponse(response)
         else:
