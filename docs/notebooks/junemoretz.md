@@ -87,3 +87,9 @@ I've done some more work on this. It seems like encoding AV1 is going to be rath
 On the bright side, testing end to end with the updated coordinator seemed to work mostly as expected! I made some worker/client tweaks and the systems level components of it performed as I expected them to. It's just the raw video file manipulation where things get difficult... as I might have expected. Those bits mostly revolve around convincing FFmpeg to do what I want, which was always a possible point of failure. I'm just glad the distributed systems bits of this seem to be working fine--and that it seems to encode H.265 perfectly as-is!
 
 Next up will be waiting to hear back from Catherine to see if we can move forward with the H.265 direction, and then implementing S3 support. From there, we're approximately done!
+
+## April 19, 2025
+
+Confirmed with Catherine that we're moving forward with H.265! I implemented S3 support yesterday (though it had a few bugs) - had to wait for Catherine to fix a coordinator issue relating to S3 credentials not being passed along correctly, which has now been fixed. I made the remaining changes to get S3 support fully functional, and performed an end-to-end test of encoding a video with avspl1t/S3, and everything works perfectly now! The one issue is with testing - I have to play the videos in VLC rather than a web browser because browser decode of H.265 in Linux seems to be hard to get working, and I wasn't able to convince Chromium to support H.265 on my machine. Not an issue with our code, at least. I'll just use VLC to record our demo.
+
+Last thing to do is put together our presentation and record a demo video! I'll do this in the near future.

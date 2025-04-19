@@ -13,7 +13,7 @@ def download_s3_file(source, destination):
     endpoint_url=source.credentials.endpoint,
     region_name=source.credentials.region
   )
-  s3.download_file(source.bucket, source.path, destination)
+  client.download_file(source.bucket, source.path, destination)
   
 def upload_s3_file(folder, source):
   client = boto3.client(
@@ -25,7 +25,10 @@ def upload_s3_file(folder, source):
   )
   path = folder.path + "/" + Path(source).name
   with open(source, "rb") as file:
-    client.upload_fileobj(file, folder.bucket, path)
+    if 'm3u8' in path:
+      client.upload_fileobj(file, folder.bucket, path, ExtraArgs={'ContentType': 'audio/mpegurl'})
+    else:
+      client.upload_fileobj(file, folder.bucket, path)
   return File(s3file=S3File(bucket=folder.bucket,path=path,credentials=folder.credentials))
 
 def download_fs_file(source, destination):

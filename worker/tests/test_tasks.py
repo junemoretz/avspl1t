@@ -37,9 +37,9 @@ def test_encode_video():
   assert len(pathlist) == 1, "Encoded segment should be generated"
 
 def test_generate_manifest():
-  input = str(Path('resources/output_0.m4s').absolute())
+  input = str(Path('resources/output_0.ts').absolute())
   inputFile = File(fsfile=FSFile(path=input))
-  input2 = str(Path('resources/output_1.m4s').absolute())
+  input2 = str(Path('resources/output_1.ts').absolute())
   inputFile2 = File(fsfile=FSFile(path=input2))
   output = str(Path('output').absolute())
   outputFolder = Folder(fsfolder=FSFolder(path=output))

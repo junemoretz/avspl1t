@@ -4,6 +4,7 @@ import grpc
 import os
 import boto3
 from pathlib import Path
+from urllib.parse import urlparse
 from proto.avspl1t_pb2 import JobDetails, AV1EncodeJob, FSFile, File, Folder, FSFolder, JobId, Job, S3Credentials, S3File, S3Folder
 from proto.avspl1t_pb2_grpc import CoordinatorServiceStub
 
@@ -141,7 +142,14 @@ def get(id):
     # Handle response
     if job_status.finished:
         click.echo("Job complete!")
-        # TODO include link to manifest
+        outputdir = job_status.job_details.av1_encode_job.output_directory
+        if outputdir.WhichOneof("folder") == "fsfolder":
+            click.echo(f'The HLS manifest can be found at:\n{outputdir.fsfolder.path}/manifest.m3u8')
+        else:
+            endpoint = getS3Credentials().endpoint
+            bucket = outputdir.s3folder.bucket
+            url = urlparse(endpoint)
+            click.echo(f'The HLS manifest can be found at:\n{url.scheme}://{bucket}.{url.netloc}/{outputdir.s3folder.path}/manifest.m3u8')
     elif job_status.failed:
         click.echo("Job failed.")
     else:
